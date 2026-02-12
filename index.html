@@ -117,6 +117,11 @@ td.warn { color:var(--yellow); }
 .status-bar div { flex:1; border-radius:2px; }
 
 .sep { border:0; border-top:1px solid var(--border); margin:12px 0; }
+details summary { list-style:none; }
+details summary::-webkit-details-marker { display:none; }
+details summary::before { content:'▸ '; }
+details[open] summary::before { content:'▾ '; }
+details { border-top:1px solid var(--border); padding-top:8px; }
 
 /* ── Auth overlay ── */
 #auth-overlay { position:fixed; inset:0; background:#0a0a0a; z-index:9999; display:flex; align-items:center; justify-content:center; }
@@ -151,6 +156,38 @@ td.warn { color:var(--yellow); }
 .tab-sub button.active { background:var(--blue); color:#fff; }
 .ride-history-item { padding:10px; border:1px solid var(--border); border-radius:6px; margin-bottom:8px; cursor:pointer; transition:all 0.2s; }
 .ride-history-item:hover { border-color:var(--blue); background:#0a0a1a; }
+
+/* ── Social buttons ── */
+.social-links { display:flex; gap:8px; flex-wrap:wrap; }
+.social-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:6px; text-decoration:none; font-size:12px; font-weight:600; color:#fff; transition:all 0.2s; border:1px solid transparent; }
+.social-btn:hover { opacity:0.85; transform:translateY(-1px); }
+.social-btn.strava { background:#fc4c02; }
+.social-btn.instagram { background:linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); }
+.social-btn.tp { background:#1a1a2e; border-color:#444; }
+
+/* ── Session bar ── */
+.session-bar { display:flex; align-items:center; gap:12px; padding:4px 16px; background:#0d0d0d; border-bottom:1px solid var(--border); font-size:11px; color:var(--text-dim); }
+.session-bar .timer { color:var(--yellow); font-family:monospace; }
+.session-bar .timer.warning { color:var(--red); animation:pulse 1s infinite; }
+@keyframes pulse { 50% { opacity:0.5; } }
+.btn-logout { background:transparent; border:1px solid var(--border); color:var(--text-dim); padding:3px 10px; border-radius:4px; font-size:11px; cursor:pointer; margin-left:auto; }
+.btn-logout:hover { border-color:var(--red); color:var(--red); }
+
+/* ── Bike components ── */
+.bike-component { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
+.bike-component:last-child { border:none; }
+.bike-component .comp-name { font-weight:600; }
+.bike-component .comp-detail { color:var(--text-dim); font-size:12px; }
+.maint-row { display:grid; grid-template-columns:1fr 80px 80px 60px; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px; }
+.maint-row:first-child { font-weight:600; color:var(--text-dim); font-size:11px; text-transform:uppercase; }
+.maint-input { background:var(--card-alt); border:1px solid var(--border); border-radius:4px; padding:4px 6px; color:var(--text); font-size:12px; width:100%; text-align:center; }
+.maint-status { text-align:center; }
+.maint-status .ok { color:var(--green); }
+.maint-status .warn { color:var(--yellow); }
+.maint-status .alert { color:var(--red); }
+
+/* ── Rate limit ── */
+#auth-lockout { color:var(--red); font-size:12px; margin-top:8px; display:none; }
 </style>
 </head>
 <body>
@@ -158,26 +195,35 @@ td.warn { color:var(--yellow); }
 <!-- ═══════ AUTH OVERLAY ═══════ -->
 <div id="auth-overlay">
 <div id="auth-box">
-<h2>🔒 APGIA</h2>
-<p>Anna's Performance & Garmin Intelligence App</p>
+<div id="auth-avatar" style="width:80px;height:80px;border-radius:50%;background:var(--border);margin:0 auto 16px;overflow:hidden;display:flex;align-items:center;justify-content:center;">
+<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/></svg>
+</div>
+<h2 style="margin-bottom:4px;">APGIA</h2>
+<p style="color:var(--text-dim); font-size:11px; margin-bottom:20px;">Anna's Performance & Garmin Intelligence App</p>
+<div id="auth-msg" style="color:var(--text-dim); font-size:12px; margin-bottom:12px; min-height:18px;"></div>
 <input type="password" id="auth-pass" placeholder="Senha" onkeydown="if(event.key==='Enter')authCheck()">
 <button onclick="authCheck()">Entrar</button>
-<div id="auth-error">Senha incorreta</div>
-<div id="auth-setup"></div>
+<div id="auth-error" style="color:var(--red); font-size:12px; margin-top:8px; display:none;"></div>
 </div>
 </div>
 
 <!-- ═══════ TAB BAR ═══════ -->
 <div class="tab-bar" style="display:none;" id="main-content-tabs">
   <button class="tab-btn active" onclick="showTab('profile')">👤 Perfil</button>
-  <button class="tab-btn" onclick="showTab('performance')">🚴 Performance</button>
+  <button class="tab-btn" onclick="showTab('bike')">🚲 Bike</button>
+  <button class="tab-btn" onclick="showTab('performance')">⚡ Performance</button>
   <button class="tab-btn" onclick="showTab('recovery')">🔋 Recuperação</button>
   <button class="tab-btn" onclick="showTab('sleep')">🌙 Sono</button>
   <button class="tab-btn" onclick="showTab('health')">🩸 Exames</button>
   <button class="tab-btn" onclick="showTab('crossover')">🔗 Crossover</button>
-  <button class="tab-btn" onclick="showTab('ride')">🔄 APGIA</button>
+  <button class="tab-btn" onclick="showTab('ride')">📝 Novo Registro</button>
   <button class="tab-btn" onclick="showTab('training')">🏋️ Análise Treino</button>
   <button class="tab-btn" onclick="showTab('trends')">📈 Tendências</button>
+</div>
+<div class="session-bar" id="session-bar" style="display:none;">
+  <span>🔒 Sessão ativa</span>
+  <span class="timer" id="session-timer">60:00</span>
+  <button class="btn-logout" onclick="doLogout()">Sair</button>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ -->
@@ -191,100 +237,273 @@ td.warn { color:var(--yellow); }
   <div class="profile-info">
     <div class="profile-name">Anna Graboski</div>
     <div class="profile-meta">
-      Nascimento: 14/04/1989 (36 anos) · Feminino<br>
-      Ciclista endurance · Bypass gástrico Roux-en-Y (2013, 13 anos)<br>
-      Rio de Janeiro, RJ
+      14/04/1989 (36 anos) · Rio de Janeiro, RJ<br>
+      Ciclista endurance · Sóbria desde 12/02/2022
     </div>
     <div class="profile-badges">
       <span class="tag tag-blue">FTP ~219W</span>
-      <span class="tag tag-green">Peso 68kg</span>
+      <span class="tag tag-green">68kg</span>
       <span class="tag tag-purple">W/kg 3.22</span>
-      <span class="tag tag-yellow">CTL 89 ↓</span>
+      <span class="tag tag-yellow">CTL 89</span>
     </div>
   </div>
+</div>
+</div>
+
+<!-- KPIs sempre visíveis -->
+<div class="card full">
+<h3>📊 Indicadores Atuais <span class="dim">(fev/26)</span></h3>
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val green">46.6%</div><div class="kpi-label">Hematócrito</div><div class="kpi-delta green">↓ era 53.7%</div></div>
+<div class="kpi"><div class="kpi-val green">93.7</div><div class="kpi-label">Ferritina</div><div class="kpi-delta green">↑ era 26.1</div></div>
+<div class="kpi"><div class="kpi-val red">57.3%</div><div class="kpi-label">Sat. Transferrina</div><div class="kpi-delta red">↑ acima ref</div></div>
+<div class="kpi"><div class="kpi-val orange">37</div><div class="kpi-label">HDL</div><div class="kpi-delta orange">crônico &lt;40</div></div>
+</div>
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val blue">42ms</div><div class="kpi-label">HRV Baseline</div></div>
+<div class="kpi"><div class="kpi-val blue">62bpm</div><div class="kpi-label">RHR Baseline</div></div>
+<div class="kpi"><div class="kpi-val yellow">57%</div><div class="kpi-label">Recovery Médio</div><div class="kpi-sub">16% RED / 36% GREEN</div></div>
+<div class="kpi"><div class="kpi-val purple">89</div><div class="kpi-label">CTL (Fitness)</div><div class="kpi-sub">Pico: 119</div></div>
 </div>
 </div>
 
 <div class="grid">
 <!-- Dados Físicos -->
 <div class="card">
-<h3>📐 Dados Físicos & Composição</h3>
+<h3>📐 Dados Físicos</h3>
 <table>
 <tr><td>Peso atual</td><td><strong>68 kg</strong> <span class="dim">(era 77kg em dez/25)</span></td></tr>
-<tr><td>FTP estimado</td><td><strong>~219W</strong> <span class="dim">(melhor 20min: 231W em 24/dez)</span></td></tr>
+<tr><td>FTP estimado</td><td><strong>~219W</strong> <span class="dim">(melhor 20min: 231W)</span></td></tr>
 <tr><td>W/kg no FTP</td><td><strong>3.22</strong> <span class="dim">(era 2.84 a 77kg)</span></td></tr>
 <tr><td>HRmax registrada</td><td><strong>~192 bpm</strong></td></tr>
-<tr><td>Perda de peso</td><td><strong>-9 kg</strong> em 8 semanas <span class="dim">(Mounjaro)</span></td></tr>
 </table>
 </div>
 
-<!-- Histórico Médico -->
-<div class="card">
-<h3>⚕️ Histórico Médico</h3>
-<table>
-<tr><td>Bypass gástrico</td><td><strong>Roux-en-Y (2013)</strong></td></tr>
-<tr><td colspan="2" class="dim" style="font-size:11px;">Absorção permanentemente alterada: ferro oral ≈0, B12 reduzida, lipossolúveis (A,D,E,K) reduzidas, cálcio reduzido</td></tr>
-<tr><td>Consequências ativas</td><td>Ferro só entra via IV (Noripurum). Recovery estruturalmente limitada.</td></tr>
-</table>
-</div>
-
-<!-- Medicações -->
-<div class="card">
-<h3>💊 Medicações & Suplementação</h3>
-<table>
-<tr><th>Substância</th><th>Via</th><th>Regime</th><th>Desde</th></tr>
-<tr><td>Mounjaro 2.5mg</td><td>SC</td><td>1x/semana</td><td>15/12/25</td></tr>
-<tr><td>Noripurum (ferro)</td><td>IV</td><td>1x/mês (nov+dez)</td><td>Nov/25</td></tr>
-<tr><td>Hemax Eritron</td><td>Oral</td><td>3x→1x→quinzenal</td><td>Out/25</td></tr>
-<tr><td>Oxandrolona 5mg</td><td>Oral</td><td>Variável</td><td>—</td></tr>
-<tr><td>Suplementos gerais</td><td>Oral/IM</td><td>B12, D, Zn, etc.</td><td>Contínuo</td></tr>
-</table>
-<div class="note note-purple" style="margin-top:8px;">
-Ferro oral (Hemax) tem absorção negligenciável pós-bypass. Reposição efetiva é Noripurum IV.
-</div>
-</div>
-
-<!-- Indicadores Recentes -->
-<div class="card">
-<h3>📊 Indicadores Recentes <span class="dim">(fev/26)</span></h3>
-<div class="kpi-row">
-<div class="kpi"><div class="kpi-val green">46.6%</div><div class="kpi-label">Hematócrito</div><div class="kpi-delta green">↓ era 53.7%</div></div>
-<div class="kpi"><div class="kpi-val green">93.7</div><div class="kpi-label">Ferritina</div><div class="kpi-delta green">↑ era 26.1</div></div>
-<div class="kpi"><div class="kpi-val red">57.3%</div><div class="kpi-label">Sat. Transferrina</div><div class="kpi-delta red">↑ acima ref</div></div>
-<div class="kpi"><div class="kpi-val orange">37</div><div class="kpi-label">HDL</div><div class="kpi-delta orange">↓ crônico &lt;40</div></div>
-</div>
-<div class="kpi-row">
-<div class="kpi"><div class="kpi-val blue">42ms</div><div class="kpi-label">HRV Baseline</div><div class="kpi-sub">Whoop média</div></div>
-<div class="kpi"><div class="kpi-val blue">62bpm</div><div class="kpi-label">RHR Baseline</div><div class="kpi-sub">Whoop média</div></div>
-<div class="kpi"><div class="kpi-val yellow">57%</div><div class="kpi-label">Recovery Médio</div><div class="kpi-sub">16% RED / 36% GREEN</div></div>
-<div class="kpi"><div class="kpi-val purple">89</div><div class="kpi-label">CTL (Fitness)</div><div class="kpi-sub">Pico: 119</div></div>
-</div>
-</div>
-</div>
-
-<!-- Equipment -->
+<!-- Equipamentos -->
 <div class="card">
 <h3>⌚ Equipamentos & Dados</h3>
-<div class="grid">
-<div>
 <table>
 <tr><td>Relógio</td><td>Garmin (GPS, potência, FC)</td></tr>
-<tr><td>Wearable 24h</td><td>Whoop (HRV, recovery, sono, strain)</td></tr>
-<tr><td>Balança</td><td>Garmin Index 2 (peso, composição corporal)</td></tr>
-<tr><td>Power meter</td><td>Sim (dados de potência por segundo)</td></tr>
+<tr><td>Wearable 24h</td><td>Whoop (HRV, recovery, sono)</td></tr>
+<tr><td>Power meter</td><td>Sim</td></tr>
 </table>
-</div>
-<div>
-<table>
+<details style="margin-top:8px;"><summary class="dim" style="cursor:pointer;">📁 Datasets disponíveis</summary>
+<table style="margin-top:6px;">
 <tr><th>Dataset</th><th>Período</th><th>Rows</th></tr>
 <tr><td>Garmin Cycling</td><td>2022–2026</td><td>~3.3M registros/s</td></tr>
 <tr><td>Whoop Daily</td><td>Fev/25–Fev/26</td><td>371 dias</td></tr>
-<tr><td>Merged</td><td>Fev/25–Fev/26</td><td>368 dias, 107 cols</td></tr>
 <tr><td>Lab Results</td><td>Set/25–Fev/26</td><td>4 exames, 55 marcadores</td></tr>
 </table>
+</details>
+</div>
+</div>
+
+<!-- Condições Crônicas -->
+<div class="card full">
+<h3>🏥 Condições Ativas</h3>
+<div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;">
+<span class="tag tag-red">Hipoglicemia reativa</span>
+<span class="tag tag-purple">TDAH</span>
+<span class="tag tag-blue">DIU Mirena</span>
+<span class="tag tag-yellow">Síndrome de Quebra-Nozes</span>
+<span class="tag tag-yellow">Varizes pélvicas</span>
+<span class="tag tag-green">Sóbria desde 12/02/2022</span>
+</div>
+<div class="dim" style="font-size:11px;">Sem vesícula (2020) · Bypass Roux-en-Y (2013) — absorção permanentemente alterada: ferro oral ≈0, B12 reduzida, lipossolúveis (A,D,E,K) comprometidas</div>
+</div>
+
+<!-- Medicação Atual -->
+<div class="card full">
+<h3>💊 Medicação & Suplementação Atual</h3>
+<table>
+<tr><th>Substância</th><th>Via</th><th>Regime</th></tr>
+<tr><td>Lamotrigina (Lamitor) 50mg</td><td>Oral</td><td>Contínuo</td></tr>
+<tr><td>Oxandrolona 5mg</td><td>Oral</td><td>Variável</td></tr>
+<tr><td>Mounjaro (tirzepatida) 2.5mg</td><td>SC</td><td>1x/semana (desde 15/12/25)</td></tr>
+</table>
+
+<details style="margin-top:10px;"><summary style="cursor:pointer; color:var(--blue); font-weight:600;">📋 Suplementação detalhada</summary>
+<table style="margin-top:8px;">
+<tr><th>Substância</th><th>Via</th><th>Regime</th><th>Nota</th></tr>
+<tr><td>Noripurum (ferro)</td><td>IV</td><td>Sob demanda</td><td>Única via eficaz pós-bypass</td></tr>
+<tr><td>Hemax Eritron (ferro)</td><td>Oral</td><td>3x→1x→quinzenal→pausa</td><td>Absorção mínima, complementar ao IV</td></tr>
+<tr><td>Vitamina D 50.000 UI</td><td>Oral</td><td>Sob demanda (sem uso atual)</td><td>Último nível: 78 ng/mL</td></tr>
+<tr><td>Vitamina B12</td><td>IM/Oral</td><td>Sob demanda</td><td>Absorção oral reduzida pós-bypass</td></tr>
+<tr><td>Magnésio</td><td>Oral</td><td>Diário (~85-93% aderência)</td><td>Consistente</td></tr>
+<tr><td>Creatina</td><td>Oral</td><td>Pausado</td><td>Parou pós-prova dez/25 (inchaço)</td></tr>
+</table>
+</details>
+</div>
+
+<!-- Histórico Cirúrgico -->
+<div class="card full">
+<details><summary style="cursor:pointer; font-weight:600; font-size:14px;">🔪 Histórico Cirúrgico (12 procedimentos)</summary>
+<table style="margin-top:10px;">
+<tr><th>Ano</th><th>Procedimento</th><th>Relevância p/ performance</th></tr>
+<tr><td>2009</td><td>Cesariana</td><td class="dim">—</td></tr>
+<tr><td>2011</td><td>Hemorroidectomia</td><td class="dim">—</td></tr>
+<tr><td>2013</td><td><strong>Bypass gástrico Roux-en-Y</strong></td><td class="red">Alta — absorção permanentemente alterada</td></tr>
+<tr><td>2014</td><td>Discectomia lombar</td><td class="yellow">Média — posição no selim, core</td></tr>
+<tr><td>2014</td><td>Retalho craniano em derme</td><td class="dim">—</td></tr>
+<tr><td>2015</td><td>Fotocoagulação a laser bilateral (retinas)</td><td class="yellow">Média — esforço intenso e pressão intraocular</td></tr>
+<tr><td>2017</td><td>Correção de hérnia de Petersen</td><td class="yellow">Média — hérnia interna pós-bypass</td></tr>
+<tr><td>2018</td><td>Correção de torção intestinal (volvo)</td><td class="yellow">Média — absorção, aderências</td></tr>
+<tr><td>2018</td><td>Abdominoplastia</td><td class="dim">—</td></tr>
+<tr><td>2018</td><td>Mastopexia com prótese</td><td class="dim">—</td></tr>
+<tr><td>2020</td><td>Colecistectomia (vesícula biliar)</td><td class="yellow">Média — absorção gorduras/vitaminas lipossolúveis</td></tr>
+<tr><td>2020</td><td>Septoplastia + turbinectomia</td><td class="green">Positivo — respiração melhorada</td></tr>
+</table>
+</details>
+</div>
+
+<!-- Contexto pessoal -->
+<div class="card full">
+<details><summary style="cursor:pointer; font-weight:600; font-size:14px;">👤 Contexto Pessoal</summary>
+<div style="margin-top:10px;">
+<table>
+<tr><td>Gestação</td><td>1 — cesariana (22/02/2009)</td></tr>
+<tr><td>Sobriedade</td><td>Desde 12/02/2022 (4 anos)</td></tr>
+<tr><td>Momento atual</td><td>Sabático + viagens</td></tr>
+<tr><td>Objetivo</td><td>W/kg — ficar leve pra subir</td></tr>
+</table>
+<h4 style="margin-top:12px;">Equipe</h4>
+<table>
+<tr><td>Assessoria esportiva</td><td><strong>Walter Tuche</strong></td></tr>
+<tr><td>Médica</td><td><strong>Dra. Daniela Tahan</strong></td></tr>
+<tr><td>Plano de saúde</td><td>Bradesco Saúde</td></tr>
+</table>
+<h4 style="margin-top:12px;">Perfis</h4>
+<div class="social-links">
+<a href="https://www.strava.com/athletes/annagraboski" target="_blank" class="social-btn strava">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+Strava</a>
+<a href="https://instagram.com/apgrabo" target="_blank" class="social-btn instagram">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
+Instagram</a>
+<a href="https://www.trainingpeaks.com/athlete/annagraboski" target="_blank" class="social-btn tp">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+TrainingPeaks</a>
+</div>
+</div>
+</details>
+</div>
+
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: BIKE -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-bike" class="tab-content">
+
+<div class="card full">
+<div style="display:flex; align-items:center; gap:16px; margin-bottom:12px;">
+<div style="font-size:36px;">🚲</div>
+<div>
+<div style="font-size:18px; font-weight:700;">S-Works Tarmac SL7</div>
+<div class="dim">2022 · Dourada · Carbon · Disc</div>
 </div>
 </div>
 </div>
+
+<div class="grid">
+
+<!-- Grupo de transmissão -->
+<div class="card">
+<h3>⚙️ Transmissão</h3>
+<div class="bike-component"><span class="comp-name">Câmbio traseiro</span><span class="comp-detail">SRAM Force eTap AXS</span></div>
+<div class="bike-component"><span class="comp-name">Câmbio dianteiro</span><span class="comp-detail">SRAM Force eTap AXS</span></div>
+<div class="bike-component"><span class="comp-name">Cassette</span><span class="comp-detail">SRAM Red 10-33T</span></div>
+<div class="bike-component"><span class="comp-name">Pedivela</span><span class="comp-detail">SRAM Red · 170mm</span></div>
+<div class="bike-component"><span class="comp-name">Coroas</span><span class="comp-detail">52/34T (paralela)</span></div>
+<div class="bike-component"><span class="comp-name">Corrente</span><span class="comp-detail">SRAM 12v</span></div>
+</div>
+
+<!-- Rodas e pneus -->
+<div class="card">
+<h3>🔵 Rodas & Pneus</h3>
+<div class="bike-component"><span class="comp-name">Roda dianteira</span><span class="comp-detail">Roval CL 50mm</span></div>
+<div class="bike-component"><span class="comp-name">Roda traseira</span><span class="comp-detail">Roval CLX 50mm</span></div>
+<div class="bike-component"><span class="comp-name">Pneus</span><span class="comp-detail">Continental GP5000 28c TL</span></div>
+<div class="bike-component"><span class="comp-name">Setup</span><span class="comp-detail">Tubeless</span></div>
+</div>
+
+<!-- Contato e controle -->
+<div class="card">
+<h3>🪑 Contato & Controle</h3>
+<div class="bike-component"><span class="comp-name">Selim</span><span class="comp-detail">Specialized Romin</span></div>
+<div class="bike-component"><span class="comp-name">Canote</span><span class="comp-detail">Sem offset</span></div>
+<div class="bike-component"><span class="comp-name">Avanço (stem)</span><span class="comp-detail">110mm</span></div>
+<div class="bike-component"><span class="comp-name">Pedais</span><span class="comp-detail">Wahoo Speedplay</span></div>
+<div class="bike-component"><span class="comp-name">Freios</span><span class="comp-detail">SRAM Force · Disco hidráulico</span></div>
+</div>
+
+<!-- Eletrônica -->
+<div class="card">
+<h3>📡 Eletrônica</h3>
+<div class="bike-component"><span class="comp-name">Computador</span><span class="comp-detail">Garmin Edge 530</span></div>
+<div class="bike-component"><span class="comp-name">Wearable</span><span class="comp-detail">Whoop 4.0</span></div>
+<div class="bike-component"><span class="comp-name">Câmbio</span><span class="comp-detail">SRAM AXS (wireless)</span></div>
+<div class="bike-component"><span class="comp-name">Power meter</span><span class="comp-detail">Sim (pedivela)</span></div>
+</div>
+
+</div>
+
+<!-- Manutenção -->
+<div class="card full">
+<h3>🔧 Controle de Manutenção</h3>
+<div class="maint-row"><span>Componente</span><span>Km atual</span><span>Limite</span><span>Status</span></div>
+<div class="maint-row">
+<span>Corrente</span>
+<input type="number" class="maint-input" id="maint-chain-km" placeholder="0" oninput="updateMaint()">
+<span class="dim" style="text-align:center;">5.000 km</span>
+<span class="maint-status" id="maint-chain-st">—</span>
+</div>
+<div class="maint-row">
+<span>Pneu dianteiro</span>
+<input type="number" class="maint-input" id="maint-tire-f-km" placeholder="0" oninput="updateMaint()">
+<span class="dim" style="text-align:center;">6.000 km</span>
+<span class="maint-status" id="maint-tire-f-st">—</span>
+</div>
+<div class="maint-row">
+<span>Pneu traseiro</span>
+<input type="number" class="maint-input" id="maint-tire-r-km" placeholder="0" oninput="updateMaint()">
+<span class="dim" style="text-align:center;">5.000 km</span>
+<span class="maint-status" id="maint-tire-r-st">—</span>
+</div>
+<div class="maint-row">
+<span>Pastilhas de freio</span>
+<input type="number" class="maint-input" id="maint-brake-km" placeholder="0" oninput="updateMaint()">
+<span class="dim" style="text-align:center;">3.000 km</span>
+<span class="maint-status" id="maint-brake-st">—</span>
+</div>
+<div class="maint-row">
+<span>Óleo mineral</span>
+<input type="number" class="maint-input" id="maint-oil-km" placeholder="0" oninput="updateMaint()">
+<span class="dim" style="text-align:center;">10.000 km</span>
+<span class="maint-status" id="maint-oil-st">—</span>
+</div>
+<div class="maint-row">
+<span>Selante TL</span>
+<input type="number" class="maint-input" id="maint-sealant-km" placeholder="0" oninput="updateMaint()">
+<span class="dim" style="text-align:center;">3.000 km</span>
+<span class="maint-status" id="maint-sealant-st">—</span>
+</div>
+<div style="margin-top:10px; display:flex; gap:8px;">
+<input type="text" class="maint-input" id="maint-last-service" placeholder="Último service completo (ex: 10/01/2026)" style="width:250px; text-align:left;">
+<button class="btn btn-blue" onclick="saveMaint()" style="padding:6px 16px;">💾 Salvar</button>
+</div>
+<div id="maint-msg" style="color:var(--green); font-size:11px; margin-top:6px; display:none;"></div>
+</div>
+
+<details class="card full" style="border:1px solid var(--border); border-radius:8px; padding:16px;">
+<summary style="cursor:pointer; font-weight:600; font-size:14px;">📊 SRAM AXS Data <span class="dim">(em breve)</span></summary>
+<div style="margin-top:10px; color:var(--text-dim); font-size:12px;">
+Dados de trocas de marcha, combinações mais usadas e bateria do SRAM AXS. Necessário exportar do app SRAM AXS.<br>
+<span class="dim">Status: aguardando dados de exportação.</span>
+</div>
+</details>
+
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ -->
@@ -769,11 +988,11 @@ O Whoop subestima o sono total e penaliza o padrão bifásico na consistência. 
 <!-- ═══════════════════════════════════════════════════════════ -->
 <div id="tab-ride" class="tab-content">
 
-<h2>🔄 APGIA — Análise Pós-Treino</h2>
+<h2>📝 Novo Registro & Análise</h2>
 
 <!-- Sub-tabs within APGIA -->
 <div class="tab-sub" id="apgia-subtabs">
-<button class="active" onclick="showApgiaSub('upload')">📤 Input</button>
+<button class="active" onclick="showApgiaSub('upload')">📝 Novo Registro</button>
 <button onclick="showApgiaSub('analysis')">📊 Análise</button>
 <button onclick="showApgiaSub('history')">📋 Histórico</button>
 <button onclick="showApgiaSub('lab-input')">🩸 Exames</button>
@@ -846,7 +1065,7 @@ O Whoop subestima o sono total e penaliza o padrão bifásico na consistência. 
 <div id="apgia-analysis" class="apgia-sub" style="display:none;">
 
 <div id="ride-empty" class="card full">
-<div class="note note-blue">Nenhum treino analisado ainda. Suba um .fit ou use input manual na aba "📤 Input".</div>
+<div class="note note-blue">Nenhum treino analisado ainda. Suba um .fit ou use entrada manual na aba "📝 Novo Registro".</div>
 </div>
 
 <div id="ride-content" style="display:none;">
@@ -1343,45 +1562,175 @@ new Chart(document.getElementById('chartPMC'), {
   }
 });
 
-// ── Auth ──
-const AUTH_KEY = 'apgia_auth_hash';
+// ── Auth (PBKDF2 + rate limit + auto-logout) ──
+const AUTH_KEY = 'apgia_auth_v2';
 const AUTH_SESSION = 'apgia_session';
+const AUTH_SESSION_TS = 'apgia_session_ts';
+const SESSION_MAX_MS = 60 * 60 * 1000; // 1 hora
+let _failCount = 0;
+let _lockUntil = 0;
+let _sessionInterval = null;
 
-async function sha256(msg) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+async function deriveKey(pass, salt) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', salt:enc.encode(salt), iterations:100000, hash:'SHA-256' }, keyMaterial, 256);
+  return Array.from(new Uint8Array(bits)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function authMsg(text, color) {
+  const el = document.getElementById('auth-msg');
+  el.textContent = text;
+  el.style.color = color || 'var(--text-dim)';
+}
+function authError(text) {
+  const el = document.getElementById('auth-error');
+  el.textContent = text;
+  el.style.display = text ? 'block' : 'none';
 }
 
 async function authCheck() {
+  // Rate limit check
+  if (Date.now() < _lockUntil) {
+    const secs = Math.ceil((_lockUntil - Date.now()) / 1000);
+    authError('⏳ Muitas tentativas. Aguarde ' + secs + 's.');
+    return;
+  }
+
   const pass = document.getElementById('auth-pass').value;
-  if (!pass) return;
-  const hash = await sha256(pass);
+  if (!pass) { authError('Digite uma senha.'); return; }
+  if (pass.length < 4) { authError('Senha precisa ter pelo menos 4 caracteres.'); return; }
+  authError('');
+
+  if (!crypto?.subtle) {
+    authError('⚠️ Requer HTTPS. Acesse via https:// ou localhost.');
+    return;
+  }
+
+  const salt = 'apgia-anna-2026';
+  const hash = await deriveKey(pass, salt);
   const stored = localStorage.getItem(AUTH_KEY);
+
   if (!stored) {
-    // First time — set password
+    if (!window._firstPassHash) {
+      window._firstPassHash = hash;
+      document.getElementById('auth-pass').value = '';
+      authMsg('Confirme a senha digitando novamente.', 'var(--yellow)');
+      document.getElementById('auth-pass').placeholder = 'Confirmar senha';
+      return;
+    }
+    if (hash !== window._firstPassHash) {
+      window._firstPassHash = null;
+      document.getElementById('auth-pass').value = '';
+      authMsg('Primeira vez? Crie sua senha.', 'var(--text-dim)');
+      document.getElementById('auth-pass').placeholder = 'Criar senha';
+      authError('Senhas não conferem.');
+      return;
+    }
     localStorage.setItem(AUTH_KEY, hash);
-    authSuccess();
+    // Remove old v1 hash if exists
+    localStorage.removeItem('apgia_auth_hash');
+    authMsg('Senha criada! ✅', 'var(--green)');
+    _failCount = 0;
+    setTimeout(authSuccess, 500);
   } else if (hash === stored) {
+    _failCount = 0;
     authSuccess();
   } else {
-    document.getElementById('auth-error').style.display = 'block';
+    _failCount++;
+    if (_failCount >= 5) {
+      _lockUntil = Date.now() + 5 * 60 * 1000;
+      authError('🔒 5 tentativas erradas. Bloqueado por 5 minutos.');
+      const iv = setInterval(() => {
+        const secs = Math.ceil((_lockUntil - Date.now()) / 1000);
+        if (secs <= 0) { authError(''); clearInterval(iv); }
+        else authError('🔒 Bloqueado. Aguarde ' + secs + 's.');
+      }, 1000);
+    } else {
+      authError('Senha incorreta. (' + _failCount + '/5)');
+    }
     document.getElementById('auth-pass').value = '';
+    document.getElementById('auth-pass').focus();
   }
 }
 
 function authSuccess() {
+  const now = Date.now();
   sessionStorage.setItem(AUTH_SESSION, '1');
+  sessionStorage.setItem(AUTH_SESSION_TS, now.toString());
   document.getElementById('auth-overlay').style.display = 'none';
   document.getElementById('main-content-tabs').style.display = 'flex';
+  document.getElementById('session-bar').style.display = 'flex';
+  startSessionTimer();
   showTab('profile');
 }
 
+function doLogout() {
+  sessionStorage.removeItem(AUTH_SESSION);
+  sessionStorage.removeItem(AUTH_SESSION_TS);
+  if (_sessionInterval) clearInterval(_sessionInterval);
+  document.getElementById('auth-overlay').style.display = 'flex';
+  document.getElementById('main-content-tabs').style.display = 'none';
+  document.getElementById('session-bar').style.display = 'none';
+  document.getElementById('auth-pass').value = '';
+  authMsg('');
+  authError('');
+}
+
+function startSessionTimer() {
+  if (_sessionInterval) clearInterval(_sessionInterval);
+  _sessionInterval = setInterval(() => {
+    const ts = parseInt(sessionStorage.getItem(AUTH_SESSION_TS) || '0');
+    const elapsed = Date.now() - ts;
+    const remaining = SESSION_MAX_MS - elapsed;
+    if (remaining <= 0) {
+      doLogout();
+      authMsg('Sessão expirou (1h). Faça login novamente.', 'var(--yellow)');
+      return;
+    }
+    const mins = Math.floor(remaining / 60000);
+    const secs = Math.floor((remaining % 60000) / 1000);
+    const timerEl = document.getElementById('session-timer');
+    timerEl.textContent = mins.toString().padStart(2,'0') + ':' + secs.toString().padStart(2,'0');
+    timerEl.classList.toggle('warning', remaining < 5 * 60 * 1000);
+  }, 1000);
+}
+
+// Reset timer on interaction
+['click','keydown','scroll'].forEach(ev => {
+  document.addEventListener(ev, () => {
+    if (sessionStorage.getItem(AUTH_SESSION)) {
+      sessionStorage.setItem(AUTH_SESSION_TS, Date.now().toString());
+    }
+  }, { passive:true });
+});
+
 // Check existing session
 if (sessionStorage.getItem(AUTH_SESSION)) {
-  authSuccess();
+  const ts = parseInt(sessionStorage.getItem(AUTH_SESSION_TS) || '0');
+  if (Date.now() - ts < SESSION_MAX_MS) {
+    authSuccess();
+  } else {
+    doLogout();
+    authMsg('Sessão expirou. Faça login novamente.', 'var(--yellow)');
+  }
 } else {
   const stored = localStorage.getItem(AUTH_KEY);
-  document.getElementById('auth-setup').textContent = stored ? '' : 'Primeira vez? A senha que digitar será sua senha.';
+  if (stored) {
+    authMsg('');
+    document.getElementById('auth-pass').placeholder = 'Senha';
+  } else {
+    // Check if migrating from v1
+    const oldHash = localStorage.getItem('apgia_auth_hash');
+    if (oldHash) {
+      authMsg('Atualização de segurança. Recrie sua senha.', 'var(--yellow)');
+      localStorage.removeItem('apgia_auth_hash');
+      document.getElementById('auth-pass').placeholder = 'Criar nova senha';
+    } else {
+      authMsg('Primeira vez? Crie sua senha.', 'var(--text-dim)');
+      document.getElementById('auth-pass').placeholder = 'Criar senha';
+    }
+  }
 }
 
 // ── APGIA Sub-tabs ──
@@ -1811,6 +2160,51 @@ new Chart(document.getElementById('chartCrossHct'), {
     scales:{ y:{ grid:gridOpts, position:'left', title:{display:true,text:'Hct %'}, min:40, max:56 }, y1:{ grid:{display:false}, position:'right', title:{display:true,text:'RHR bpm'}, min:55, max:70 }, x:{ grid:gridOpts } },
   }
 });
+
+
+// ── Bike Maintenance ──
+const MAINT_KEY = 'apgia_bike_maint';
+const MAINT_LIMITS = { chain:5000, 'tire-f':6000, 'tire-r':5000, brake:3000, oil:10000, sealant:3000 };
+
+function loadMaint() {
+  try {
+    const d = JSON.parse(localStorage.getItem(MAINT_KEY) || '{}');
+    ['chain','tire-f','tire-r','brake','oil','sealant'].forEach(k => {
+      const el = document.getElementById('maint-' + k + '-km');
+      if (el && d[k] !== undefined) el.value = d[k];
+    });
+    if (d.lastService) document.getElementById('maint-last-service').value = d.lastService;
+    updateMaint();
+  } catch {}
+}
+
+function saveMaint() {
+  const d = {};
+  ['chain','tire-f','tire-r','brake','oil','sealant'].forEach(k => {
+    d[k] = parseInt(document.getElementById('maint-' + k + '-km').value) || 0;
+  });
+  d.lastService = document.getElementById('maint-last-service').value;
+  localStorage.setItem(MAINT_KEY, JSON.stringify(d));
+  const msg = document.getElementById('maint-msg');
+  msg.textContent = '✅ Salvo!';
+  msg.style.display = 'block';
+  setTimeout(() => msg.style.display = 'none', 2000);
+}
+
+function updateMaint() {
+  ['chain','tire-f','tire-r','brake','oil','sealant'].forEach(k => {
+    const km = parseInt(document.getElementById('maint-' + k + '-km').value) || 0;
+    const limit = MAINT_LIMITS[k];
+    const pct = km / limit;
+    const el = document.getElementById('maint-' + k + '-st');
+    if (pct < 0.7) el.innerHTML = '<span class="ok">✅</span>';
+    else if (pct < 0.9) el.innerHTML = '<span class="warn">⚠️</span>';
+    else el.innerHTML = '<span class="alert">🔴</span>';
+  });
+}
+
+// Load maintenance data on page ready
+setTimeout(loadMaint, 100);
 </script>
 
 <div style="text-align:center; padding:20px; color:#333; font-size:10px;">
