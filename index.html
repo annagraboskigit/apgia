@@ -1562,27 +1562,15 @@ new Chart(document.getElementById('chartPMC'), {
   }
 });
 
-// ── Auth (PBKDF2 + rate limit + auto-logout) ──
-const AUTH_KEY = 'apgia_auth_v2';
+// ── Auth (hardcoded SHA-256) ──
+const HARDCODED_HASH = 'ad2bb4e57ba2b07cadbcbfb7963fc072e1376b86cd347c0f908a3835ccdb90c5';
 const AUTH_SESSION = 'apgia_session';
-const AUTH_SESSION_TS = 'apgia_session_ts';
-const SESSION_MAX_MS = 60 * 60 * 1000; // 1 hora
-let _failCount = 0;
-let _lockUntil = 0;
-let _sessionInterval = null;
 
-async function deriveKey(pass, salt) {
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', salt:enc.encode(salt), iterations:100000, hash:'SHA-256' }, keyMaterial, 256);
-  return Array.from(new Uint8Array(bits)).map(b=>b.toString(16).padStart(2,'0')).join('');
+async function sha256(msg) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-function authMsg(text, color) {
-  const el = document.getElementById('auth-msg');
-  el.textContent = text;
-  el.style.color = color || 'var(--text-dim)';
-}
 function authError(text) {
   const el = document.getElementById('auth-error');
   el.textContent = text;
@@ -1590,93 +1578,33 @@ function authError(text) {
 }
 
 async function authCheck() {
-  // Rate limit check
-  if (Date.now() < _lockUntil) {
-    const secs = Math.ceil((_lockUntil - Date.now()) / 1000);
-    authError('⏳ Muitas tentativas. Aguarde ' + secs + 's.');
-    return;
-  }
-
   const pass = document.getElementById('auth-pass').value;
-  if (!pass) { authError('Digite uma senha.'); return; }
-  if (pass.length < 4) { authError('Senha precisa ter pelo menos 4 caracteres.'); return; }
+  if (!pass) { authError('Digite a senha.'); return; }
   authError('');
-
-  if (!crypto?.subtle) {
-    authError('⚠️ Requer HTTPS. Acesse via https:// ou localhost.');
-    return;
-  }
-
-  const salt = 'apgia-anna-2026';
-  const hash = await deriveKey(pass, salt);
-  const stored = localStorage.getItem(AUTH_KEY);
-
-  if (!stored) {
-    if (!window._firstPassHash) {
-      window._firstPassHash = hash;
-      document.getElementById('auth-pass').value = '';
-      authMsg('Confirme a senha digitando novamente.', 'var(--yellow)');
-      document.getElementById('auth-pass').placeholder = 'Confirmar senha';
-      return;
-    }
-    if (hash !== window._firstPassHash) {
-      window._firstPassHash = null;
-      document.getElementById('auth-pass').value = '';
-      authMsg('Primeira vez? Crie sua senha.', 'var(--text-dim)');
-      document.getElementById('auth-pass').placeholder = 'Criar senha';
-      authError('Senhas não conferem.');
-      return;
-    }
-    localStorage.setItem(AUTH_KEY, hash);
-    // Remove old v1 hash if exists
-    localStorage.removeItem('apgia_auth_hash');
-    authMsg('Senha criada! ✅', 'var(--green)');
-    _failCount = 0;
-    setTimeout(authSuccess, 500);
-  } else if (hash === stored) {
-    _failCount = 0;
+  const hash = await sha256(pass);
+  if (hash === HARDCODED_HASH) {
     authSuccess();
   } else {
-    _failCount++;
-    if (_failCount >= 5) {
-      _lockUntil = Date.now() + 5 * 60 * 1000;
-      authError('🔒 5 tentativas erradas. Bloqueado por 5 minutos.');
-      const iv = setInterval(() => {
-        const secs = Math.ceil((_lockUntil - Date.now()) / 1000);
-        if (secs <= 0) { authError(''); clearInterval(iv); }
-        else authError('🔒 Bloqueado. Aguarde ' + secs + 's.');
-      }, 1000);
-    } else {
-      authError('Senha incorreta. (' + _failCount + '/5)');
-    }
+    authError('Senha incorreta.');
     document.getElementById('auth-pass').value = '';
-    document.getElementById('auth-pass').focus();
   }
 }
 
 function authSuccess() {
-  const now = Date.now();
   sessionStorage.setItem(AUTH_SESSION, '1');
-  sessionStorage.setItem(AUTH_SESSION_TS, now.toString());
   document.getElementById('auth-overlay').style.display = 'none';
   document.getElementById('main-content-tabs').style.display = 'flex';
   document.getElementById('session-bar').style.display = 'flex';
-  startSessionTimer();
   showTab('profile');
 }
 
 function doLogout() {
   sessionStorage.removeItem(AUTH_SESSION);
-  sessionStorage.removeItem(AUTH_SESSION_TS);
-  if (_sessionInterval) clearInterval(_sessionInterval);
   document.getElementById('auth-overlay').style.display = 'flex';
   document.getElementById('main-content-tabs').style.display = 'none';
   document.getElementById('session-bar').style.display = 'none';
   document.getElementById('auth-pass').value = '';
-  authMsg('');
   authError('');
-}
-
 function startSessionTimer() {
   if (_sessionInterval) clearInterval(_sessionInterval);
   _sessionInterval = setInterval(() => {
