@@ -25,7 +25,9 @@ const AuthGate = (() => {
 
   let supabase = null;
   let config = {};
-  let _tempAccess = false; // true if accessing via temp link
+  let _tempAccess = false;
+  let _tempToken = null;
+  let _tempLinkData = null;
 
   // ============================================
   // INIT
@@ -48,19 +50,37 @@ const AuthGate = (() => {
     const tempToken = urlParams.get('token');
 
     if (tempToken) {
-      const valid = await validateTempToken(tempToken);
-      if (valid) {
-        _tempAccess = true;
-        hideLoginForm();
-        showProtectedContent();
-        showTempBanner(valid.expires_at);
-        if (config.onAuth) {
-          config.onAuth({ email: 'guest', id: null }, { role: 'viewer', can_read: true, can_write: false, can_admin: false });
-        }
+      // Primeiro: checar se o token existe e tá ativo (sem filtrar expires_at, porque pode ser null no primeiro acesso)
+      const { data: linkData, error: linkErr } = await supabase
+        .from('temp_links')
+        .select('*')
+        .eq('token', tempToken)
+        .eq('active', true)
+        .maybeSingle();
+
+      if (linkErr || !linkData) {
+        showTempExpired();
         return;
       }
-      // Token invalid/expired — fall through to normal auth
-      showMessage('Link expirado ou inválido', true);
+
+      // Se já foi ativado e expirou
+      if (linkData.expires_at && new Date(linkData.expires_at) < new Date()) {
+        showTempExpired();
+        return;
+      }
+
+      // Token válido — guardar referência e mostrar welcome
+      _tempToken = tempToken;
+      _tempLinkData = linkData;
+      _tempAccess = true;
+
+      // Se já tem email registrado (visita de retorno), pula welcome
+      if (linkData.visitor_email) {
+        await activateAndShow(tempToken, linkData.visitor_email);
+      } else {
+        showWelcomeScreen(linkData);
+      }
+      return;
     }
 
     // Check current session
@@ -83,31 +103,125 @@ const AuthGate = (() => {
   }
 
   // ============================================
-  // TEMP LINK VALIDATION
+  // TEMP LINK — WELCOME, ACTIVATION, BANNER
   // ============================================
-  async function validateTempToken(token) {
-    const { data, error } = await supabase
-      .from('temp_links')
-      .select('*')
-      .eq('token', token)
-      .eq('site', config.site)
-      .gt('expires_at', new Date().toISOString())
-      .eq('active', true)
-      .maybeSingle();
 
-    if (error || !data) return null;
+  function showWelcomeScreen(linkData) {
+    document.querySelectorAll('[data-auth="protected"]').forEach(el => {
+      el.style.display = 'none';
+    });
 
-    // Increment use count
-    await supabase.from('temp_links')
-      .update({ used_count: (data.used_count || 0) + 1 })
-      .eq('id', data.id);
+    const hours = linkData.duration_hours || 1;
+    let container = document.getElementById(config.loginContainerId);
+    if (!container) {
+      container = document.createElement('div');
+      container.id = config.loginContainerId;
+      document.body.prepend(container);
+    }
 
-    return data;
+    container.innerHTML = `
+      <div style="
+        position: fixed; inset: 0; z-index: 9999;
+        display: flex; align-items: center; justify-content: center;
+        background: #0a0a0a; font-family: -apple-system, sans-serif;
+      ">
+        <div style="
+          width: 420px; padding: 48px 40px;
+          border: 1px solid #222; border-radius: 12px;
+          background: #111; color: #ccc;
+        ">
+          <h1 style="
+            font-size: 20px; color: #fff; margin-bottom: 16px;
+            font-weight: 400; line-height: 1.4;
+          ">Bem-vindo ao meu mundo.</h1>
+
+          <p style="font-size: 14px; color: #888; line-height: 1.7; margin-bottom: 12px;">
+            Esse é um link temporário e tá válido por <strong style="color: #f0c040;">${hours}h</strong> desde o primeiro acesso.
+          </p>
+          <p style="font-size: 14px; color: #888; line-height: 1.7; margin-bottom: 24px;">
+            Se eu te dei esse acesso, é pra você ver e entender um pouco do que estou fazendo. Aproveite.
+          </p>
+
+          <div style="margin-bottom: 24px;">
+            <label style="font-size: 12px; color: #666; display: block; margin-bottom: 6px;">
+              Digite seu email pra deixar de rastro, por favor.
+            </label>
+            <input id="temp-visitor-email" type="email" placeholder="seu@email.com"
+              style="
+                width: 100%; padding: 10px 12px;
+                background: #0a0a0a; border: 1px solid #333; border-radius: 6px;
+                color: #fff; font-size: 14px; box-sizing: border-box;
+              "
+            />
+          </div>
+
+          <button onclick="AuthGate._handleTempEnter()" style="
+            width: 100%; padding: 12px; background: #1a2a1a;
+            border: 1px solid #2a5a3a; border-radius: 8px;
+            color: #4a9; cursor: pointer; font-size: 14px;
+            font-weight: 500; transition: background 0.2s;
+          ">Entrar</button>
+
+          <div style="
+            margin-top: 24px; padding-top: 20px;
+            border-top: 1px solid #1a1a1a;
+            font-size: 12px; color: #555; line-height: 1.8;
+          ">
+            Se precisar de mais tempo, só me pedir que te dou acesso novamente.<br>
+            <a href="mailto:eu@annagraboski.com" style="color: #68f; text-decoration: none;">eu@annagraboski.com</a>
+            &nbsp;·&nbsp;
+            <a href="https://wa.me/5521984142399" style="color: #4a9; text-decoration: none;">WhatsApp</a>
+          </div>
+
+          <div id="auth-gate-msg" style="
+            margin-top: 12px; text-align: center;
+            font-size: 12px; color: #666; min-height: 18px;
+          "></div>
+        </div>
+      </div>
+    `;
+    container.style.display = 'block';
   }
 
-  function showTempBanner(expiresAt) {
+  async function _handleTempEnter() {
+    const emailInput = document.getElementById('temp-visitor-email');
+    const email = emailInput?.value?.trim();
+    if (!email || !email.includes('@')) {
+      showMessage('Preciso do seu email pra liberar o acesso', true);
+      return;
+    }
+    await activateAndShow(_tempToken, email);
+  }
+
+  async function activateAndShow(token, email) {
+    // Chamar RPC que ativa no primeiro acesso ou valida nos subsequentes
+    const { data, error } = await supabase.rpc('activate_temp_link', {
+      link_token: token,
+      email: email
+    });
+
+    if (error || (data && data.error)) {
+      showTempExpired();
+      return;
+    }
+
+    // Sucesso — mostrar conteúdo
+    hideLoginForm();
+    showProtectedContent();
+    showTempCTA(data.expires_at, data.duration_hours);
+
+    if (config.onAuth) {
+      config.onAuth(
+        { email: email, id: null },
+        { role: 'viewer', can_read: true, can_write: false, can_admin: false }
+      );
+    }
+  }
+
+  function showTempCTA(expiresAt, hours) {
     const exp = new Date(expiresAt);
-    const remaining = Math.max(0, Math.round((exp - Date.now()) / 60000));
+
+    // Top banner com countdown
     const banner = document.createElement('div');
     banner.id = 'temp-access-banner';
     banner.style.cssText = `
@@ -116,10 +230,31 @@ const AuthGate = (() => {
       padding: 8px 16px; font-family: -apple-system, sans-serif;
       font-size: 12px; color: #f0c040; text-align: center;
     `;
-    banner.textContent = `Acesso temporário · expira em ${remaining} min`;
+    updateBannerText(banner, exp);
     document.body.prepend(banner);
 
-    // Auto-refresh countdown
+    // Bottom CTA fixo
+    const cta = document.createElement('div');
+    cta.id = 'temp-access-cta';
+    cta.style.cssText = `
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 10000;
+      background: #111; border-top: 1px solid #222;
+      padding: 10px 16px; font-family: -apple-system, sans-serif;
+      font-size: 12px; color: #666; text-align: center;
+      display: flex; align-items: center; justify-content: center; gap: 16px;
+    `;
+    cta.innerHTML = `
+      <span>Acesso temporário · Precisa de mais tempo?</span>
+      <a href="mailto:eu@annagraboski.com" style="color: #68f; text-decoration: none; font-weight: 500;">Email</a>
+      <a href="https://wa.me/5521984142399" style="color: #4a9; text-decoration: none; font-weight: 500;">WhatsApp</a>
+    `;
+    document.body.appendChild(cta);
+
+    // Ajustar padding do body pra não cobrir conteúdo
+    document.body.style.paddingTop = '36px';
+    document.body.style.paddingBottom = '40px';
+
+    // Countdown a cada 30s
     const interval = setInterval(() => {
       const rem = Math.max(0, Math.round((exp - Date.now()) / 60000));
       if (rem <= 0) {
@@ -127,11 +262,70 @@ const AuthGate = (() => {
         banner.textContent = 'Acesso expirado';
         banner.style.background = '#2e1a1a';
         banner.style.color = '#e74c3c';
-        setTimeout(() => location.reload(), 3000);
+        cta.innerHTML = '<span style="color: #e74c3c;">Acesso expirado</span>';
+        setTimeout(() => location.reload(), 5000);
       } else {
-        banner.textContent = `Acesso temporário · expira em ${rem} min`;
+        updateBannerText(banner, exp);
       }
     }, 30000);
+  }
+
+  function updateBannerText(banner, exp) {
+    const diff = exp - Date.now();
+    const mins = Math.max(0, Math.round(diff / 60000));
+    if (mins >= 60) {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      banner.textContent = `Acesso temporário · expira em ${h}h${m > 0 ? m + 'min' : ''}`;
+    } else {
+      banner.textContent = `Acesso temporário · expira em ${mins} min`;
+    }
+  }
+
+  function showTempExpired() {
+    document.querySelectorAll('[data-auth="protected"]').forEach(el => {
+      el.style.display = 'none';
+    });
+
+    let container = document.getElementById(config.loginContainerId);
+    if (!container) {
+      container = document.createElement('div');
+      container.id = config.loginContainerId;
+      document.body.prepend(container);
+    }
+
+    container.innerHTML = `
+      <div style="
+        position: fixed; inset: 0; z-index: 9999;
+        display: flex; align-items: center; justify-content: center;
+        background: #0a0a0a; font-family: -apple-system, sans-serif;
+      ">
+        <div style="
+          width: 380px; padding: 40px; text-align: center;
+          border: 1px solid #222; border-radius: 12px;
+          background: #111; color: #ccc;
+        ">
+          <div style="font-size: 32px; margin-bottom: 16px;">⏰</div>
+          <h2 style="font-size: 16px; color: #e74c3c; margin-bottom: 12px; font-weight: 400;">
+            Link expirado ou inválido
+          </h2>
+          <p style="font-size: 13px; color: #666; line-height: 1.7; margin-bottom: 24px;">
+            Se precisar de mais tempo, só me pedir que te dou acesso novamente.
+          </p>
+          <div style="display: flex; gap: 12px; justify-content: center;">
+            <a href="mailto:eu@annagraboski.com" style="
+              padding: 8px 20px; background: #1a1a2e; border: 1px solid #333;
+              border-radius: 6px; color: #68f; text-decoration: none; font-size: 13px;
+            ">Email</a>
+            <a href="https://wa.me/5521984142399" style="
+              padding: 8px 20px; background: #1a2a1a; border: 1px solid #2a5a3a;
+              border-radius: 6px; color: #4a9; text-decoration: none; font-size: 13px;
+            ">WhatsApp</a>
+          </div>
+        </div>
+      </div>
+    `;
+    container.style.display = 'block';
   }
 
   // ============================================
@@ -338,6 +532,7 @@ const AuthGate = (() => {
     getClient,
     isTempAccess: () => _tempAccess,
     // Internal (for onclick)
-    _handleGitHub
+    _handleGitHub,
+    _handleTempEnter
   };
 })();

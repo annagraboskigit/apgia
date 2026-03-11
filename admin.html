@@ -172,6 +172,8 @@
           <tr>
             <th>Site</th>
             <th>Label</th>
+            <th>Visitante</th>
+            <th>Ativado</th>
             <th>Expira</th>
             <th>Usos</th>
             <th>Status</th>
@@ -392,20 +394,27 @@ async function loadTempLinks() {
   const now = new Date();
 
   tbody.innerHTML = links.map(l => {
-    const exp = new Date(l.expires_at);
-    const isExpired = exp < now;
-    const status = !l.active ? 'revoked' : isExpired ? 'expired' : 'active';
-    const statusLabel = status === 'active' ? 'Ativo' : status === 'expired' ? 'Expirado' : 'Revogado';
+    const exp = l.expires_at ? new Date(l.expires_at) : null;
+    const activated = l.first_accessed_at ? new Date(l.first_accessed_at) : null;
+    const isExpired = exp ? exp < now : false;
+    const isWaiting = !activated; // nunca foi acessado
+    const status = !l.active ? 'revoked' : isExpired ? 'expired' : isWaiting ? 'pending' : 'active';
+    const statusLabel = status === 'active' ? 'Ativo'
+      : status === 'expired' ? 'Expirado'
+      : status === 'pending' ? 'Aguardando'
+      : 'Revogado';
 
     return `
       <tr>
         <td>${l.site}</td>
         <td>${l.label || '—'}</td>
-        <td>${exp.toLocaleString('pt-BR')}</td>
+        <td>${l.visitor_email || '<span style="color:#444;">—</span>'}</td>
+        <td>${activated ? activated.toLocaleString('pt-BR') : '<span style="color:#444;">não acessado</span>'}</td>
+        <td>${exp ? exp.toLocaleString('pt-BR') : '<span style="color:#444;">após 1º acesso</span>'}</td>
         <td>${l.used_count || 0}</td>
         <td><span class="badge badge-${status}">${statusLabel}</span></td>
         <td>
-          ${status === 'active' ? `<button class="btn btn-deny" onclick="revokeLink('${l.id}')" style="font-size:11px;">Revogar</button>` : ''}
+          ${(status === 'active' || status === 'pending') ? `<button class="btn btn-deny" onclick="revokeLink('${l.id}')" style="font-size:11px;">Revogar</button>` : ''}
         </td>
       </tr>
     `;
