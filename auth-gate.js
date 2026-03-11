@@ -25,6 +25,7 @@ const AuthGate = (() => {
 
   let supabase = null;
   let config = {};
+  let _tempAccess = false; // true if accessing via temp link
 
   // ============================================
   // INIT
@@ -42,6 +43,26 @@ const AuthGate = (() => {
     // Init Supabase client
     supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    // Check for temp access token in URL: ?token=XXXX
+    const urlParams = new URLSearchParams(window.location.search);
+    const tempToken = urlParams.get('token');
+
+    if (tempToken) {
+      const valid = await validateTempToken(tempToken);
+      if (valid) {
+        _tempAccess = true;
+        hideLoginForm();
+        showProtectedContent();
+        showTempBanner(valid.expires_at);
+        if (config.onAuth) {
+          config.onAuth({ email: 'guest', id: null }, { role: 'viewer', can_read: true, can_write: false, can_admin: false });
+        }
+        return;
+      }
+      // Token invalid/expired — fall through to normal auth
+      showMessage('Link expirado ou inválido', true);
+    }
+
     // Check current session
     const { data: { session } } = await supabase.auth.getSession();
 
@@ -51,7 +72,7 @@ const AuthGate = (() => {
       showLoginForm();
     }
 
-    // Listen for auth changes (magic link, OAuth callback, etc.)
+    // Listen for auth changes (OAuth callback)
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
         await handleAuthenticated(session.user);
@@ -59,6 +80,58 @@ const AuthGate = (() => {
         showLoginForm();
       }
     });
+  }
+
+  // ============================================
+  // TEMP LINK VALIDATION
+  // ============================================
+  async function validateTempToken(token) {
+    const { data, error } = await supabase
+      .from('temp_links')
+      .select('*')
+      .eq('token', token)
+      .eq('site', config.site)
+      .gt('expires_at', new Date().toISOString())
+      .eq('active', true)
+      .maybeSingle();
+
+    if (error || !data) return null;
+
+    // Increment use count
+    await supabase.from('temp_links')
+      .update({ used_count: (data.used_count || 0) + 1 })
+      .eq('id', data.id);
+
+    return data;
+  }
+
+  function showTempBanner(expiresAt) {
+    const exp = new Date(expiresAt);
+    const remaining = Math.max(0, Math.round((exp - Date.now()) / 60000));
+    const banner = document.createElement('div');
+    banner.id = 'temp-access-banner';
+    banner.style.cssText = `
+      position: fixed; top: 0; left: 0; right: 0; z-index: 10000;
+      background: #1a1a2e; border-bottom: 1px solid #333;
+      padding: 8px 16px; font-family: -apple-system, sans-serif;
+      font-size: 12px; color: #f0c040; text-align: center;
+    `;
+    banner.textContent = `Acesso temporário · expira em ${remaining} min`;
+    document.body.prepend(banner);
+
+    // Auto-refresh countdown
+    const interval = setInterval(() => {
+      const rem = Math.max(0, Math.round((exp - Date.now()) / 60000));
+      if (rem <= 0) {
+        clearInterval(interval);
+        banner.textContent = 'Acesso expirado';
+        banner.style.background = '#2e1a1a';
+        banner.style.color = '#e74c3c';
+        setTimeout(() => location.reload(), 3000);
+      } else {
+        banner.textContent = `Acesso temporário · expira em ${rem} min`;
+      }
+    }, 30000);
   }
 
   // ============================================
@@ -95,28 +168,8 @@ const AuthGate = (() => {
   }
 
   // ============================================
-  // LOGIN METHODS
+  // LOGIN METHODS (GitHub only)
   // ============================================
-  async function loginWithEmail(email, password) {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-    if (error) throw error;
-    return data;
-  }
-
-  async function loginWithMagicLink(email) {
-    const { data, error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: window.location.href
-      }
-    });
-    if (error) throw error;
-    return data;
-  }
-
   async function loginWithGitHub() {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'github',
@@ -134,7 +187,7 @@ const AuthGate = (() => {
   }
 
   // ============================================
-  // UI — Login Form
+  // UI — Login Form (GitHub only)
   // ============================================
   function showLoginForm() {
     // Hide protected content
@@ -165,84 +218,24 @@ const AuthGate = (() => {
             color: #666; margin-bottom: 32px; font-weight: 300;
           ">${config.site.toUpperCase()}</h1>
 
-          <div id="auth-gate-tabs" style="
-            display: flex; gap: 0; margin-bottom: 24px;
-            border-bottom: 1px solid #333;
+          <button onclick="AuthGate._handleGitHub()" style="
+            width: 100%; padding: 12px; background: #161b22;
+            border: 1px solid #333; border-radius: 8px;
+            color: #fff; cursor: pointer; font-size: 14px;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
           ">
-            <button onclick="AuthGate._showTab('email')" id="tab-email" style="
-              flex: 1; padding: 8px; background: none; border: none;
-              color: #fff; cursor: pointer; border-bottom: 2px solid #fff;
-              font-size: 13px;
-            ">Email</button>
-            <button onclick="AuthGate._showTab('magic')" id="tab-magic" style="
-              flex: 1; padding: 8px; background: none; border: none;
-              color: #666; cursor: pointer; border-bottom: 2px solid transparent;
-              font-size: 13px;
-            ">Magic Link</button>
-          </div>
-
-          <!-- Email/Password -->
-          <div id="auth-form-email">
-            <input id="auth-email" type="email" placeholder="email"
-              style="
-                width: 100%; padding: 10px 12px; margin-bottom: 12px;
-                background: #0a0a0a; border: 1px solid #333; border-radius: 6px;
-                color: #fff; font-size: 14px; box-sizing: border-box;
-              "
-            />
-            <input id="auth-password" type="password" placeholder="senha"
-              style="
-                width: 100%; padding: 10px 12px; margin-bottom: 16px;
-                background: #0a0a0a; border: 1px solid #333; border-radius: 6px;
-                color: #fff; font-size: 14px; box-sizing: border-box;
-              "
-            />
-            <button onclick="AuthGate._handleEmailLogin()" style="
-              width: 100%; padding: 10px; background: #222; border: 1px solid #444;
-              border-radius: 8px; color: #fff; cursor: pointer; font-size: 14px;
-              transition: background 0.2s;
-            ">Entrar</button>
-          </div>
-
-          <!-- Magic Link -->
-          <div id="auth-form-magic" style="display: none;">
-            <input id="auth-magic-email" type="email" placeholder="email"
-              style="
-                width: 100%; padding: 10px 12px; margin-bottom: 16px;
-                background: #0a0a0a; border: 1px solid #333; border-radius: 6px;
-                color: #fff; font-size: 14px; box-sizing: border-box;
-              "
-            />
-            <button onclick="AuthGate._handleMagicLink()" style="
-              width: 100%; padding: 10px; background: #222; border: 1px solid #444;
-              border-radius: 8px; color: #fff; cursor: pointer; font-size: 14px;
-            ">Enviar link</button>
-          </div>
-
-          <!-- GitHub OAuth -->
-          <div style="
-            margin-top: 16px; padding-top: 16px;
-            border-top: 1px solid #222;
-          ">
-            <button onclick="AuthGate._handleGitHub()" style="
-              width: 100%; padding: 10px; background: #161b22;
-              border: 1px solid #333; border-radius: 8px;
-              color: #fff; cursor: pointer; font-size: 14px;
-              display: flex; align-items: center; justify-content: center; gap: 8px;
-            ">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="white">
-                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
-                0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
-                -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66
-                .07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15
-                -.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0
-                1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56
-                .82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07
-                -.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-              </svg>
-              GitHub
-            </button>
-          </div>
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="white">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+              0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
+              -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66
+              .07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15
+              -.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0
+              1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56
+              .82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07
+              -.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+            Entrar com GitHub
+          </button>
 
           <div id="auth-gate-msg" style="
             margin-top: 16px; text-align: center;
@@ -306,58 +299,13 @@ const AuthGate = (() => {
   }
 
   // ============================================
-  // INTERNAL HANDLERS (exposed for onclick)
+  // INTERNAL HANDLERS
   // ============================================
-  async function _handleEmailLogin() {
-    const email = document.getElementById('auth-email')?.value;
-    const password = document.getElementById('auth-password')?.value;
-    if (!email || !password) return showMessage('Preenche email e senha', true);
-    try {
-      await loginWithEmail(email, password);
-    } catch (e) {
-      showMessage(e.message, true);
-    }
-  }
-
-  async function _handleMagicLink() {
-    const email = document.getElementById('auth-magic-email')?.value;
-    if (!email) return showMessage('Preenche o email', true);
-    try {
-      await loginWithMagicLink(email);
-      showMessage('Link enviado! Checa teu email.');
-    } catch (e) {
-      showMessage(e.message, true);
-    }
-  }
-
   async function _handleGitHub() {
     try {
       await loginWithGitHub();
     } catch (e) {
       showMessage(e.message, true);
-    }
-  }
-
-  function _showTab(tab) {
-    const emailForm = document.getElementById('auth-form-email');
-    const magicForm = document.getElementById('auth-form-magic');
-    const tabEmail = document.getElementById('tab-email');
-    const tabMagic = document.getElementById('tab-magic');
-
-    if (tab === 'email') {
-      emailForm.style.display = 'block';
-      magicForm.style.display = 'none';
-      tabEmail.style.color = '#fff';
-      tabEmail.style.borderBottomColor = '#fff';
-      tabMagic.style.color = '#666';
-      tabMagic.style.borderBottomColor = 'transparent';
-    } else {
-      emailForm.style.display = 'none';
-      magicForm.style.display = 'block';
-      tabMagic.style.color = '#fff';
-      tabMagic.style.borderBottomColor = '#fff';
-      tabEmail.style.color = '#666';
-      tabEmail.style.borderBottomColor = 'transparent';
     }
   }
 
@@ -384,16 +332,12 @@ const AuthGate = (() => {
   return {
     init,
     logout,
-    loginWithEmail,
-    loginWithMagicLink,
     loginWithGitHub,
     getUser,
     getSession,
     getClient,
-    // Internal (for onclick handlers)
-    _handleEmailLogin,
-    _handleMagicLink,
-    _handleGitHub,
-    _showTab
+    isTempAccess: () => _tempAccess,
+    // Internal (for onclick)
+    _handleGitHub
   };
 })();

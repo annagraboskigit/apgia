@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin · SSO</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0a; color: #ccc;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+    }
+    .topbar {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 24px; border-bottom: 1px solid #222;
+      background: #111;
+    }
+    .topbar h1 { font-size: 13px; letter-spacing: 3px; color: #666; font-weight: 300; }
+    .topbar .user { font-size: 12px; color: #888; }
+    .topbar button {
+      background: none; border: 1px solid #333; color: #888;
+      padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;
+    }
+    .container { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+    .section { margin-bottom: 40px; }
+    .section h2 {
+      font-size: 14px; color: #888; margin-bottom: 16px;
+      text-transform: uppercase; letter-spacing: 2px; font-weight: 400;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left; padding: 8px 12px; font-size: 11px;
+      color: #666; border-bottom: 1px solid #222; text-transform: uppercase;
+      letter-spacing: 1px; font-weight: 400;
+    }
+    td {
+      padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #1a1a1a;
+    }
+    tr:hover { background: #111; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 500;
+    }
+    .badge-admin { background: #1a3a2a; color: #4a9; }
+    .badge-viewer { background: #1a1a2e; color: #68f; }
+    .badge-pending { background: #2e2a1a; color: #f0c040; }
+    .badge-active { background: #1a3a2a; color: #4a9; }
+    .badge-expired { background: #2e1a1a; color: #e74c3c; }
+    .badge-revoked { background: #1a1a1a; color: #666; }
+    .btn {
+      padding: 4px 12px; border-radius: 4px; font-size: 12px;
+      cursor: pointer; border: 1px solid #333; background: #1a1a1a;
+      color: #ccc; transition: all 0.2s;
+    }
+    .btn:hover { background: #222; }
+    .btn-approve { border-color: #2a5a3a; color: #4a9; }
+    .btn-approve:hover { background: #1a3a2a; }
+    .btn-deny { border-color: #5a2a2a; color: #e74c3c; }
+    .btn-deny:hover { background: #2e1a1a; }
+    .btn-primary {
+      background: #161b22; border-color: #333; color: #fff;
+      padding: 8px 16px; font-size: 13px;
+    }
+    .btn-primary:hover { background: #222; }
+    .form-row {
+      display: flex; gap: 12px; align-items: center; margin-bottom: 16px;
+    }
+    select, input[type="text"], input[type="number"] {
+      background: #111; border: 1px solid #333; border-radius: 6px;
+      padding: 8px 12px; color: #fff; font-size: 13px;
+    }
+    .link-output {
+      background: #111; border: 1px solid #333; border-radius: 6px;
+      padding: 12px; font-family: monospace; font-size: 12px;
+      color: #4a9; word-break: break-all; display: none;
+      margin-top: 12px;
+    }
+    .site-checks { display: flex; gap: 12px; }
+    .site-checks label { font-size: 12px; color: #888; cursor: pointer; }
+    .site-checks input { margin-right: 4px; }
+    #login-screen {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh;
+    }
+    #admin-content { display: none; }
+    .empty { text-align: center; padding: 32px; color: #444; font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<!-- Login screen -->
+<div id="login-screen">
+  <div style="width: 340px; padding: 40px; border: 1px solid #222; border-radius: 12px; background: #111; text-align: center;">
+    <h1 style="font-size: 13px; letter-spacing: 3px; color: #666; margin-bottom: 24px; font-weight: 300;">ADMIN SSO</h1>
+    <button onclick="loginGitHub()" class="btn-primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px;">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="white">
+        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+      </svg>
+      Entrar com GitHub
+    </button>
+    <p id="login-msg" style="margin-top: 12px; font-size: 12px; color: #666;"></p>
+  </div>
+</div>
+
+<!-- Admin content -->
+<div id="admin-content">
+  <div class="topbar">
+    <h1>ADMIN · SSO</h1>
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <span class="user" id="admin-email"></span>
+      <button onclick="doLogout()">Sair</button>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- Pending users (signed up via GitHub but no site_permissions) -->
+    <div class="section">
+      <h2>Usuários pendentes</h2>
+      <table id="pending-table">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Nome</th>
+            <th>Cadastro</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="pending-body"></tbody>
+      </table>
+      <div id="pending-empty" class="empty" style="display:none;">Nenhum usuário pendente</div>
+    </div>
+
+    <!-- All users -->
+    <div class="section">
+      <h2>Usuários ativos</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Role</th>
+            <th>APGIA</th>
+            <th>Scout</th>
+            <th>Linktree</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="users-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Temp links -->
+    <div class="section">
+      <h2>Links temporários</h2>
+      <div class="form-row">
+        <select id="link-site">
+          <option value="apgia">APGIA</option>
+          <option value="scout">Scout</option>
+          <option value="linktree-admin">Linktree Admin</option>
+        </select>
+        <input type="number" id="link-hours" value="1" min="1" max="72" style="width: 70px;" />
+        <span style="font-size: 12px; color: #666;">horas</span>
+        <input type="text" id="link-label" placeholder="label (opcional)" style="flex: 1;" />
+        <button class="btn btn-primary" onclick="generateLink()">Gerar link</button>
+      </div>
+      <div class="link-output" id="link-output"></div>
+
+      <table style="margin-top: 16px;">
+        <thead>
+          <tr>
+            <th>Site</th>
+            <th>Label</th>
+            <th>Expira</th>
+            <th>Usos</th>
+            <th>Status</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="links-body"></tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://rqiwrlygeduzaaejlmrx.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_GzPnmabRnXBq1OMNKcyrAA_DMUbesm7';
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ---- Auth ----
+async function loginGitHub() {
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: 'github',
+    options: { redirectTo: window.location.href }
+  });
+  if (error) {
+    document.getElementById('login-msg').textContent = error.message;
+  }
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+  location.reload();
+}
+
+async function checkAuth() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return;
+
+  // Check if admin
+  const { data: profile } = await sb
+    .from('profiles')
+    .select('role, email')
+    .eq('id', session.user.id)
+    .single();
+
+  if (!profile || profile.role !== 'admin') {
+    document.getElementById('login-msg').textContent = 'Acesso restrito a admins';
+    document.getElementById('login-msg').style.color = '#e74c3c';
+    return;
+  }
+
+  // Show admin panel
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('admin-content').style.display = 'block';
+  document.getElementById('admin-email').textContent = profile.email;
+
+  loadPendingUsers();
+  loadAllUsers();
+  loadTempLinks();
+}
+
+// ---- Pending users ----
+async function loadPendingUsers() {
+  // Users who have a profile but zero site_permissions
+  const { data: allProfiles } = await sb.from('profiles').select('*');
+  const { data: allPerms } = await sb.from('site_permissions').select('profile_id');
+
+  const permIds = new Set((allPerms || []).map(p => p.profile_id));
+  const pending = (allProfiles || []).filter(p => !permIds.has(p.id) && p.role !== 'admin');
+
+  const tbody = document.getElementById('pending-body');
+  const empty = document.getElementById('pending-empty');
+
+  if (pending.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = pending.map(p => `
+    <tr>
+      <td>${p.email}</td>
+      <td>${p.display_name || '—'}</td>
+      <td>${new Date(p.created_at).toLocaleDateString('pt-BR')}</td>
+      <td>
+        <div class="site-checks" id="sites-${p.id}">
+          <label><input type="checkbox" value="apgia" checked> APGIA</label>
+          <label><input type="checkbox" value="scout"> Scout</label>
+          <label><input type="checkbox" value="linktree-admin"> Linktree</label>
+        </div>
+        <div style="margin-top: 8px; display: flex; gap: 8px;">
+          <button class="btn btn-approve" onclick="approveUser('${p.id}')">Aprovar</button>
+          <button class="btn btn-deny" onclick="removeUser('${p.id}')">Negar</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function approveUser(profileId) {
+  const container = document.getElementById(`sites-${profileId}`);
+  const checks = container.querySelectorAll('input[type="checkbox"]:checked');
+  const sites = Array.from(checks).map(c => c.value);
+
+  if (sites.length === 0) {
+    alert('Seleciona pelo menos um site');
+    return;
+  }
+
+  for (const site of sites) {
+    await sb.from('site_permissions').upsert({
+      profile_id: profileId,
+      site: site,
+      can_read: true,
+      can_write: false,
+      can_admin: false
+    }, { onConflict: 'profile_id,site' });
+  }
+
+  loadPendingUsers();
+  loadAllUsers();
+}
+
+async function removeUser(profileId) {
+  if (!confirm('Remover esse usuário? (deleta o perfil)')) return;
+  // Note: this deletes profile. The auth.users entry stays, but they can't access anything.
+  await sb.from('profiles').delete().eq('id', profileId);
+  loadPendingUsers();
+  loadAllUsers();
+}
+
+// ---- All users ----
+async function loadAllUsers() {
+  const { data: profiles } = await sb.from('profiles').select('*');
+  const { data: perms } = await sb.from('site_permissions').select('*');
+
+  const permMap = {};
+  (perms || []).forEach(p => {
+    if (!permMap[p.profile_id]) permMap[p.profile_id] = {};
+    permMap[p.profile_id][p.site] = p;
+  });
+
+  const usersWithPerms = (profiles || []).filter(p =>
+    permMap[p.id] || p.role === 'admin'
+  );
+
+  const tbody = document.getElementById('users-body');
+  tbody.innerHTML = usersWithPerms.map(p => {
+    const up = permMap[p.id] || {};
+    const siteIcon = (site) => up[site]
+      ? '<span style="color:#4a9;">✓</span>'
+      : '<span style="color:#333;">—</span>';
+
+    return `
+      <tr>
+        <td>${p.email}</td>
+        <td><span class="badge badge-${p.role}">${p.role}</span></td>
+        <td style="text-align:center;">${siteIcon('apgia')}</td>
+        <td style="text-align:center;">${siteIcon('scout')}</td>
+        <td style="text-align:center;">${siteIcon('linktree-admin')}</td>
+        <td>
+          ${p.role !== 'admin' ? `<button class="btn btn-deny" onclick="revokeAllAccess('${p.id}')" style="font-size:11px;">Revogar</button>` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function revokeAllAccess(profileId) {
+  if (!confirm('Revogar todo acesso desse usuário?')) return;
+  await sb.from('site_permissions').delete().eq('profile_id', profileId);
+  loadPendingUsers();
+  loadAllUsers();
+}
+
+// ---- Temp links ----
+async function generateLink() {
+  const site = document.getElementById('link-site').value;
+  const hours = parseInt(document.getElementById('link-hours').value) || 1;
+  const label = document.getElementById('link-label').value || null;
+
+  const { data, error } = await sb.rpc('create_temp_link', {
+    site_name: site,
+    hours: hours,
+    link_label: label
+  });
+
+  const output = document.getElementById('link-output');
+  if (error) {
+    output.style.display = 'block';
+    output.style.color = '#e74c3c';
+    output.textContent = error.message;
+    return;
+  }
+
+  output.style.display = 'block';
+  output.style.color = '#4a9';
+  output.innerHTML = `
+    <strong>Link gerado:</strong><br>
+    <a href="${data.url}" target="_blank" style="color: #68f;">${data.url}</a><br>
+    <small style="color:#666;">Expira: ${new Date(data.expires_at).toLocaleString('pt-BR')}</small>
+    <button onclick="navigator.clipboard.writeText('${data.url}'); this.textContent='Copiado!'"
+      style="margin-left: 12px; background: #222; border: 1px solid #333; color: #ccc; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;">
+      Copiar
+    </button>
+  `;
+
+  loadTempLinks();
+}
+
+async function loadTempLinks() {
+  const { data: links, error } = await sb.rpc('list_temp_links');
+  if (error || !links) return;
+
+  const tbody = document.getElementById('links-body');
+  const now = new Date();
+
+  tbody.innerHTML = links.map(l => {
+    const exp = new Date(l.expires_at);
+    const isExpired = exp < now;
+    const status = !l.active ? 'revoked' : isExpired ? 'expired' : 'active';
+    const statusLabel = status === 'active' ? 'Ativo' : status === 'expired' ? 'Expirado' : 'Revogado';
+
+    return `
+      <tr>
+        <td>${l.site}</td>
+        <td>${l.label || '—'}</td>
+        <td>${exp.toLocaleString('pt-BR')}</td>
+        <td>${l.used_count || 0}</td>
+        <td><span class="badge badge-${status}">${statusLabel}</span></td>
+        <td>
+          ${status === 'active' ? `<button class="btn btn-deny" onclick="revokeLink('${l.id}')" style="font-size:11px;">Revogar</button>` : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function revokeLink(linkId) {
+  await sb.rpc('revoke_temp_link', { link_id: linkId });
+  loadTempLinks();
+}
+
+// ---- Init ----
+sb.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_IN') checkAuth();
+});
+checkAuth();
+</script>
+</body>
+</html>
