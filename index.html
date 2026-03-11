@@ -6,6 +6,8 @@
 <title>APGIA</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="auth-gate.js"></script>
 <style>
 :root {
   --bg:        #0a0a0a;
@@ -124,15 +126,7 @@ details[open] summary::before { content:'▾ '; }
 details { border-top:1px solid var(--border); padding-top:8px; }
 
 /* ── Auth overlay ── */
-#auth-overlay { position:fixed; inset:0; background:#0a0a0a; z-index:9999; display:flex; align-items:center; justify-content:center; }
-#auth-box { text-align:center; width:240px; }
-#auth-box h2 { font-size:15px; font-weight:300; letter-spacing:6px; text-transform:uppercase; color:var(--text-dim); margin-bottom:32px; }
-#auth-box input { width:100%; padding:10px 0; background:transparent; border:none; border-bottom:1px solid var(--border); color:var(--text); font-size:14px; text-align:center; letter-spacing:1px; margin-bottom:24px; }
-#auth-box input:focus { outline:none; border-bottom-color:var(--text-dim); }
-#auth-box input::placeholder { color:transparent; }
-#auth-box button { background:none; border:1px solid var(--border); border-radius:20px; color:var(--text-dim); font-size:11px; letter-spacing:3px; text-transform:uppercase; padding:10px 32px; cursor:pointer; transition:all 0.3s; }
-#auth-box button:hover { border-color:var(--text-dim); color:var(--text); }
-#auth-error { color:var(--red); font-size:11px; margin-top:16px; display:none; }
+/* auth-overlay styles removed — now handled by auth-gate.js */
 
 /* ── Forms ── */
 .form-group { margin-bottom:14px; }
@@ -191,18 +185,14 @@ details { border-top:1px solid var(--border); padding-top:8px; }
 </head>
 <body>
 
-<!-- ═══════ AUTH OVERLAY ═══════ -->
-<div id="auth-overlay">
-<div id="auth-box">
-<h2>apgia</h2>
-<input type="password" id="auth-pass" onkeydown="if(event.key==='Enter')authCheck()">
-<button onclick="authCheck()">Oráculo</button>
-<div id="auth-error"></div>
-</div>
-</div>
+<!-- ═══════ AUTH (Supabase) ═══════ -->
+<div id="auth-gate-login"></div>
+
+<!-- ═══════ PROTECTED CONTENT ═══════ -->
+<div data-auth="protected" style="display:none;">
 
 <!-- ═══════ TAB BAR ═══════ -->
-<div class="tab-bar" style="display:none;" id="main-content-tabs">
+<div class="tab-bar" id="main-content-tabs">
   <button class="tab-btn active" onclick="showTab('profile')">👤 Perfil</button>
   <button class="tab-btn" onclick="showTab('bike')">🚲 Bike</button>
   <button class="tab-btn" onclick="showTab('performance')">⚡ Performance</button>
@@ -214,10 +204,10 @@ details { border-top:1px solid var(--border); padding-top:8px; }
   <button class="tab-btn" onclick="showTab('training')">🏋️ Análise Treino</button>
   <button class="tab-btn" onclick="showTab('trends')">📈 Tendências</button>
 </div>
-<div class="session-bar" id="session-bar" style="display:none;">
+<div class="session-bar" id="session-bar">
   <span>🔒 Sessão ativa</span>
-  <span class="timer" id="session-timer">60:00</span>
-  <button class="btn-logout" onclick="doLogout()">Sair</button>
+  <span id="auth-user-email" style="color:var(--text-xdim);"></span>
+  <button class="btn-logout" onclick="AuthGate.logout()">Sair</button>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ -->
@@ -1556,55 +1546,15 @@ new Chart(document.getElementById('chartPMC'), {
   }
 });
 
-// ── Auth (hardcoded SHA-256) ──
-const HARDCODED_HASH = 'ad2bb4e57ba2b07cadbcbfb7963fc072e1376b86cd347c0f908a3835ccdb90c5';
-const AUTH_SESSION = 'apgia_session';
-
-async function sha256(msg) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
-
-function authError(text) {
-  const el = document.getElementById('auth-error');
-  el.textContent = text;
-  el.style.display = text ? 'block' : 'none';
-}
-
-async function authCheck() {
-  const pass = document.getElementById('auth-pass').value;
-  if (!pass) { authError('Digite a senha.'); return; }
-  authError('');
-  const hash = await sha256(pass);
-  if (hash === HARDCODED_HASH) {
-    authSuccess();
-  } else {
-    authError('Senha incorreta.');
-    document.getElementById('auth-pass').value = '';
+// ── Auth (Supabase SSO) ──
+AuthGate.init({
+  site: 'apgia',
+  onAuth: (user, permissions) => {
+    console.log('APGIA auth OK:', user.email, permissions);
+    document.getElementById('auth-user-email').textContent = user.email;
+    showTab('profile');
   }
-}
-
-function authSuccess() {
-  sessionStorage.setItem(AUTH_SESSION, '1');
-  document.getElementById('auth-overlay').style.display = 'none';
-  document.getElementById('main-content-tabs').style.display = 'flex';
-  document.getElementById('session-bar').style.display = 'flex';
-  showTab('profile');
-}
-
-function doLogout() {
-  sessionStorage.removeItem(AUTH_SESSION);
-  document.getElementById('auth-overlay').style.display = 'flex';
-  document.getElementById('main-content-tabs').style.display = 'none';
-  document.getElementById('session-bar').style.display = 'none';
-  document.getElementById('auth-pass').value = '';
-  authError('');
-}
-
-// Check existing session
-if (sessionStorage.getItem(AUTH_SESSION)) {
-  authSuccess();
-}
+});
 
 // ── APGIA Sub-tabs ──
 function showApgiaSub(id) {
@@ -2084,6 +2034,8 @@ setTimeout(loadMaint, 100);
   APGIA · Health & Performance Dashboard · Dados: Garmin (2022–26), Whoop (fev/25–fev/26), Lab (set/25–fev/26)<br>
   Não substitui avaliação médica · Bypass Roux-en-Y 2013
 </div>
+
+</div><!-- /data-auth="protected" -->
 
 </body>
 </html>
