@@ -1,0 +1,1822 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>APGIA — Health & Performance Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+:root {
+  --bg:        #0a0a0a;
+  --card:      #141414;
+  --card-alt:  #1a1a1a;
+  --border:    #222;
+  --border-lt: #333;
+  --text:      #e0e0e0;
+  --text-dim:  #888;
+  --text-xdim: #555;
+  --red:       #ef4444;
+  --orange:    #f97316;
+  --yellow:    #eab308;
+  --green:     #22c55e;
+  --blue:      #3b82f6;
+  --purple:    #a855f7;
+  --cyan:      #06b6d4;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,-apple-system,sans-serif; font-size:13px; line-height:1.6; }
+
+/* ── Tabs ── */
+.tab-bar { display:flex; gap:0; background:#111; border-bottom:2px solid var(--border); position:sticky; top:0; z-index:100; overflow-x:auto; }
+.tab-btn { padding:12px 20px; background:transparent; border:none; color:var(--text-dim); font-size:13px; font-weight:600; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap; transition:all 0.2s; }
+.tab-btn:hover { color:var(--text); background:#1a1a1a; }
+.tab-btn.active { color:var(--blue); border-bottom-color:var(--blue); background:#0a0a1a; }
+.tab-content { display:none; padding:20px; max-width:1300px; margin:0 auto; }
+.tab-content.active { display:block; }
+
+/* ── Layout ── */
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+.grid-4 { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; }
+.full { grid-column:1/-1; }
+@media(max-width:900px) { .grid,.grid-3,.grid-4 { grid-template-columns:1fr; } }
+
+.card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:12px; }
+h2 { font-size:16px; margin:24px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+h2:first-child { margin-top:0; }
+h3 { font-size:13px; margin:0 0 8px; font-weight:700; }
+h4 { font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin:10px 0 6px; }
+
+/* ── KPI ── */
+.kpi-row { display:flex; gap:10px; flex-wrap:wrap; margin:8px 0; }
+.kpi { background:var(--card-alt); border:1px solid var(--border); border-radius:6px; padding:10px 14px; flex:1; min-width:100px; }
+.kpi-val { font-size:22px; font-weight:700; line-height:1.2; }
+.kpi-label { font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.3px; }
+.kpi-sub { font-size:10px; color:var(--text-xdim); }
+.kpi-delta { font-size:10px; margin-top:2px; }
+
+/* ── Colors ── */
+.red { color:var(--red); } .orange { color:var(--orange); } .yellow { color:var(--yellow); }
+.green { color:var(--green); } .blue { color:var(--blue); } .purple { color:var(--purple); } .cyan { color:var(--cyan); }
+.dim { color:var(--text-dim); } .xdim { color:var(--text-xdim); }
+
+/* ── Tags & Pills ── */
+.tag { display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:600; margin:1px; }
+.tag-red { background:#3a1111; color:var(--red); }
+.tag-yellow { background:#3a3011; color:var(--yellow); }
+.tag-green { background:#113a11; color:var(--green); }
+.tag-blue { background:#111133; color:var(--blue); }
+.tag-purple { background:#1a0a2a; color:var(--purple); }
+
+/* ── Findings ── */
+.note { padding:10px 12px; border-radius:6px; margin:8px 0; font-size:12px; line-height:1.7; }
+.note-red { background:#1a0a0a; border:1px solid #3a1111; }
+.note-yellow { background:#1a1700; border:1px solid #3a3011; }
+.note-green { background:#0a1a0a; border:1px solid #113a11; }
+.note-blue { background:#0a0a1a; border:1px solid #11113a; }
+.note-purple { background:#0f0a1a; border:1px solid #1a113a; }
+
+/* ── Tables ── */
+table { width:100%; border-collapse:collapse; font-size:12px; margin:6px 0; }
+th { text-align:left; padding:5px 8px; border-bottom:2px solid var(--border-lt); color:var(--text-dim); font-weight:600; font-size:11px; }
+td { padding:5px 8px; border-bottom:1px solid #1a1a1a; }
+tr:hover { background:#1a1a1a; }
+td.hi { color:var(--red); font-weight:600; }
+td.lo { color:var(--orange); font-weight:600; }
+td.ok { color:var(--green); }
+td.warn { color:var(--yellow); }
+
+/* ── Timeline ── */
+.timeline { position:relative; padding-left:18px; border-left:2px solid var(--border-lt); margin:12px 0 12px 8px; }
+.tl-item { position:relative; padding:6px 0 14px 14px; }
+.tl-item::before { content:''; position:absolute; left:-24px; top:10px; width:10px; height:10px; border-radius:50%; border:2px solid; }
+.tl-red::before { border-color:var(--red); background:#3a1111; }
+.tl-yellow::before { border-color:var(--yellow); background:#3a3011; }
+.tl-green::before { border-color:var(--green); background:#113a11; }
+.tl-blue::before { border-color:var(--blue); background:#11113a; }
+.tl-purple::before { border-color:var(--purple); background:#1a0a2a; }
+.tl-date { font-size:10px; color:var(--text-dim); font-weight:600; }
+.tl-title { font-size:12px; font-weight:600; margin:1px 0; }
+.tl-detail { font-size:11px; color:#aaa; line-height:1.6; }
+
+/* ── Charts ── */
+.chart-box { position:relative; height:200px; margin:6px 0; }
+.chart-box-lg { position:relative; height:280px; margin:6px 0; }
+
+/* ── Profile specific ── */
+.profile-header { display:flex; gap:20px; align-items:flex-start; }
+.profile-avatar { width:80px; height:80px; border-radius:50%; background:linear-gradient(135deg,var(--blue),var(--purple)); display:flex; align-items:center; justify-content:center; font-size:32px; flex-shrink:0; }
+.profile-info { flex:1; }
+.profile-name { font-size:20px; font-weight:700; margin-bottom:2px; }
+.profile-meta { font-size:12px; color:var(--text-dim); line-height:1.8; }
+.profile-badges { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+
+/* ── Status bar ── */
+.status-bar { display:flex; gap:4px; height:6px; border-radius:3px; overflow:hidden; margin:4px 0; }
+.status-bar div { flex:1; border-radius:2px; }
+
+.sep { border:0; border-top:1px solid var(--border); margin:12px 0; }
+
+/* ── Auth overlay ── */
+#auth-overlay { position:fixed; inset:0; background:#0a0a0a; z-index:9999; display:flex; align-items:center; justify-content:center; }
+#auth-box { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:40px; max-width:360px; width:90%; text-align:center; }
+#auth-box h2 { margin-bottom:8px; font-size:18px; }
+#auth-box p { color:var(--text-dim); font-size:12px; margin-bottom:20px; }
+#auth-box input { width:100%; padding:12px; background:#0a0a0a; border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:14px; margin-bottom:12px; text-align:center; }
+#auth-box input:focus { outline:none; border-color:var(--blue); }
+#auth-box button { width:100%; padding:12px; background:var(--blue); border:none; border-radius:6px; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+#auth-box button:hover { opacity:0.9; }
+#auth-error { color:var(--red); font-size:12px; margin-top:8px; display:none; }
+#auth-setup { color:var(--text-dim); font-size:11px; margin-top:12px; }
+
+/* ── Forms ── */
+.form-group { margin-bottom:14px; }
+.form-group label { display:block; font-size:11px; color:var(--text-dim); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px; }
+.form-group input, .form-group select, .form-group textarea { width:100%; padding:8px 10px; background:#0a0a0a; border:1px solid var(--border); border-radius:4px; color:var(--text); font-size:13px; }
+.form-group input:focus, .form-group select:focus { outline:none; border-color:var(--blue); }
+.form-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.form-row-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+.btn { padding:10px 20px; border:none; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer; transition:all 0.2s; }
+.btn-blue { background:var(--blue); color:#fff; }
+.btn-green { background:var(--green); color:#fff; }
+.btn-purple { background:var(--purple); color:#fff; }
+.btn-dim { background:var(--border); color:var(--text-dim); }
+.btn:hover { opacity:0.85; }
+.drop-zone { border:2px dashed var(--border); border-radius:8px; padding:30px; text-align:center; color:var(--text-dim); cursor:pointer; transition:all 0.2s; }
+.drop-zone:hover, .drop-zone.drag-over { border-color:var(--blue); color:var(--text); background:#0a0a1a; }
+.drop-zone .icon { font-size:28px; margin-bottom:8px; }
+.tab-sub { display:flex; gap:0; background:#111; border-radius:8px; overflow:hidden; margin-bottom:16px; }
+.tab-sub button { flex:1; padding:10px; background:transparent; border:none; color:var(--text-dim); font-size:12px; font-weight:600; cursor:pointer; }
+.tab-sub button.active { background:var(--blue); color:#fff; }
+.ride-history-item { padding:10px; border:1px solid var(--border); border-radius:6px; margin-bottom:8px; cursor:pointer; transition:all 0.2s; }
+.ride-history-item:hover { border-color:var(--blue); background:#0a0a1a; }
+</style>
+</head>
+<body>
+
+<!-- ═══════ AUTH OVERLAY ═══════ -->
+<div id="auth-overlay">
+<div id="auth-box">
+<h2>🔒 APGIA</h2>
+<p>Anna's Performance & Garmin Intelligence App</p>
+<input type="password" id="auth-pass" placeholder="Senha" onkeydown="if(event.key==='Enter')authCheck()">
+<button onclick="authCheck()">Entrar</button>
+<div id="auth-error">Senha incorreta</div>
+<div id="auth-setup"></div>
+</div>
+</div>
+
+<!-- ═══════ TAB BAR ═══════ -->
+<div class="tab-bar" style="display:none;" id="main-content-tabs">
+  <button class="tab-btn active" onclick="showTab('profile')">👤 Perfil</button>
+  <button class="tab-btn" onclick="showTab('performance')">🚴 Performance</button>
+  <button class="tab-btn" onclick="showTab('recovery')">🔋 Recuperação</button>
+  <button class="tab-btn" onclick="showTab('sleep')">🌙 Sono</button>
+  <button class="tab-btn" onclick="showTab('health')">🩸 Exames</button>
+  <button class="tab-btn" onclick="showTab('crossover')">🔗 Crossover</button>
+  <button class="tab-btn" onclick="showTab('ride')">🔄 APGIA</button>
+  <button class="tab-btn" onclick="showTab('training')">🏋️ Análise Treino</button>
+  <button class="tab-btn" onclick="showTab('trends')">📈 Tendências</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: PERFIL -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-profile" class="tab-content active">
+
+<div class="card full">
+<div class="profile-header">
+  <div class="profile-avatar">🚴</div>
+  <div class="profile-info">
+    <div class="profile-name">Anna Graboski</div>
+    <div class="profile-meta">
+      Nascimento: 14/04/1989 (36 anos) · Feminino<br>
+      Ciclista endurance · Bypass gástrico Roux-en-Y (2013, 13 anos)<br>
+      Rio de Janeiro, RJ
+    </div>
+    <div class="profile-badges">
+      <span class="tag tag-blue">FTP ~219W</span>
+      <span class="tag tag-green">Peso 68kg</span>
+      <span class="tag tag-purple">W/kg 3.22</span>
+      <span class="tag tag-yellow">CTL 89 ↓</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="grid">
+<!-- Dados Físicos -->
+<div class="card">
+<h3>📐 Dados Físicos & Composição</h3>
+<table>
+<tr><td>Peso atual</td><td><strong>68 kg</strong> <span class="dim">(era 77kg em dez/25)</span></td></tr>
+<tr><td>FTP estimado</td><td><strong>~219W</strong> <span class="dim">(melhor 20min: 231W em 24/dez)</span></td></tr>
+<tr><td>W/kg no FTP</td><td><strong>3.22</strong> <span class="dim">(era 2.84 a 77kg)</span></td></tr>
+<tr><td>HRmax registrada</td><td><strong>~192 bpm</strong></td></tr>
+<tr><td>Perda de peso</td><td><strong>-9 kg</strong> em 8 semanas <span class="dim">(Mounjaro)</span></td></tr>
+</table>
+</div>
+
+<!-- Histórico Médico -->
+<div class="card">
+<h3>⚕️ Histórico Médico</h3>
+<table>
+<tr><td>Bypass gástrico</td><td><strong>Roux-en-Y (2013)</strong></td></tr>
+<tr><td colspan="2" class="dim" style="font-size:11px;">Absorção permanentemente alterada: ferro oral ≈0, B12 reduzida, lipossolúveis (A,D,E,K) reduzidas, cálcio reduzido</td></tr>
+<tr><td>Consequências ativas</td><td>Ferro só entra via IV (Noripurum). Recovery estruturalmente limitada.</td></tr>
+</table>
+</div>
+
+<!-- Medicações -->
+<div class="card">
+<h3>💊 Medicações & Suplementação</h3>
+<table>
+<tr><th>Substância</th><th>Via</th><th>Regime</th><th>Desde</th></tr>
+<tr><td>Mounjaro 2.5mg</td><td>SC</td><td>1x/semana</td><td>15/12/25</td></tr>
+<tr><td>Noripurum (ferro)</td><td>IV</td><td>1x/mês (nov+dez)</td><td>Nov/25</td></tr>
+<tr><td>Hemax Eritron</td><td>Oral</td><td>3x→1x→quinzenal</td><td>Out/25</td></tr>
+<tr><td>Oxandrolona 5mg</td><td>Oral</td><td>Variável</td><td>—</td></tr>
+<tr><td>Suplementos gerais</td><td>Oral/IM</td><td>B12, D, Zn, etc.</td><td>Contínuo</td></tr>
+</table>
+<div class="note note-purple" style="margin-top:8px;">
+Ferro oral (Hemax) tem absorção negligenciável pós-bypass. Reposição efetiva é Noripurum IV.
+</div>
+</div>
+
+<!-- Indicadores Recentes -->
+<div class="card">
+<h3>📊 Indicadores Recentes <span class="dim">(fev/26)</span></h3>
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val green">46.6%</div><div class="kpi-label">Hematócrito</div><div class="kpi-delta green">↓ era 53.7%</div></div>
+<div class="kpi"><div class="kpi-val green">93.7</div><div class="kpi-label">Ferritina</div><div class="kpi-delta green">↑ era 26.1</div></div>
+<div class="kpi"><div class="kpi-val red">57.3%</div><div class="kpi-label">Sat. Transferrina</div><div class="kpi-delta red">↑ acima ref</div></div>
+<div class="kpi"><div class="kpi-val orange">37</div><div class="kpi-label">HDL</div><div class="kpi-delta orange">↓ crônico &lt;40</div></div>
+</div>
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val blue">42ms</div><div class="kpi-label">HRV Baseline</div><div class="kpi-sub">Whoop média</div></div>
+<div class="kpi"><div class="kpi-val blue">62bpm</div><div class="kpi-label">RHR Baseline</div><div class="kpi-sub">Whoop média</div></div>
+<div class="kpi"><div class="kpi-val yellow">57%</div><div class="kpi-label">Recovery Médio</div><div class="kpi-sub">16% RED / 36% GREEN</div></div>
+<div class="kpi"><div class="kpi-val purple">89</div><div class="kpi-label">CTL (Fitness)</div><div class="kpi-sub">Pico: 119</div></div>
+</div>
+</div>
+</div>
+
+<!-- Equipment -->
+<div class="card">
+<h3>⌚ Equipamentos & Dados</h3>
+<div class="grid">
+<div>
+<table>
+<tr><td>Relógio</td><td>Garmin (GPS, potência, FC)</td></tr>
+<tr><td>Wearable 24h</td><td>Whoop (HRV, recovery, sono, strain)</td></tr>
+<tr><td>Balança</td><td>Garmin Index 2 (peso, composição corporal)</td></tr>
+<tr><td>Power meter</td><td>Sim (dados de potência por segundo)</td></tr>
+</table>
+</div>
+<div>
+<table>
+<tr><th>Dataset</th><th>Período</th><th>Rows</th></tr>
+<tr><td>Garmin Cycling</td><td>2022–2026</td><td>~3.3M registros/s</td></tr>
+<tr><td>Whoop Daily</td><td>Fev/25–Fev/26</td><td>371 dias</td></tr>
+<tr><td>Merged</td><td>Fev/25–Fev/26</td><td>368 dias, 107 cols</td></tr>
+<tr><td>Lab Results</td><td>Set/25–Fev/26</td><td>4 exames, 55 marcadores</td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: PERFORMANCE -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-performance" class="tab-content">
+
+<h2>⚡ Gestão de Carga (PMC)</h2>
+<div class="card full">
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val blue">89</div><div class="kpi-label">CTL (Fitness)</div><div class="kpi-sub">Pico: 119 (Q3/25)</div></div>
+<div class="kpi"><div class="kpi-val orange">48</div><div class="kpi-label">ATL (Fadiga)</div><div class="kpi-sub">Pico: 181</div></div>
+<div class="kpi"><div class="kpi-val green">+41</div><div class="kpi-label">TSB (Form)</div><div class="kpi-sub">Descansada</div></div>
+<div class="kpi"><div class="kpi-val purple">219W</div><div class="kpi-label">FTP Estimado</div><div class="kpi-sub">Best 20min: 231W</div></div>
+</div>
+<div class="chart-box-lg"><canvas id="chartPMC"></canvas></div>
+</div>
+
+<h2>🏔️ Curva de Potência</h2>
+<div class="card full">
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val">784W</div><div class="kpi-label">Sprint 1s</div></div>
+<div class="kpi"><div class="kpi-val">515W</div><div class="kpi-label">Anaeróbico 30s</div></div>
+<div class="kpi"><div class="kpi-val">276W</div><div class="kpi-label">VO₂max 5min</div></div>
+<div class="kpi"><div class="kpi-val">231W</div><div class="kpi-label">Limiar 20min</div></div>
+<div class="kpi"><div class="kpi-val">192W</div><div class="kpi-label">Endurance 60min</div></div>
+</div>
+<div class="note note-blue">
+Perfil endurance: queda de 20min→60min é suave (83%), indicando boa sustentação de esforço longo. Consistente com treinos de 50-110km e CTL >100.
+</div>
+</div>
+
+<h2>📊 Evolução por Período</h2>
+<div class="card full" style="overflow-x:auto;">
+<table>
+<tr><th>Período</th><th>Dias</th><th>CTL</th><th>ATL</th><th>TSB</th><th>Sessões/sem</th><th>Strain/sem</th><th>Status</th></tr>
+<tr><td>Build-up (out-dez/25)</td><td>45</td><td>75→95</td><td>—</td><td>24→1</td><td>6.1</td><td>97</td><td><span class="tag tag-blue">Construção</span></td></tr>
+<tr style="background:#1a1520;"><td><strong>Prova 300km (6/dez)</strong></td><td>1</td><td>108</td><td>—</td><td>-59</td><td>—</td><td>TSS 634</td><td><span class="tag tag-purple">Evento</span></td></tr>
+<tr><td>Recovery (7-13/dez)</td><td>7</td><td>108→100</td><td>—</td><td>-59→-10</td><td>4</td><td>—</td><td><span class="tag tag-green">Recuperação</span></td></tr>
+<tr><td>Volume restart (14-21/dez)</td><td>7</td><td>101→98</td><td>—</td><td>-13→-1</td><td>9.0</td><td>—</td><td><span class="tag tag-yellow">Retomada</span></td></tr>
+<tr style="background:#1a1010;"><td>Home office (22/dez-4/jan)</td><td>13</td><td>96→97</td><td>—</td><td>10→11</td><td class="hi">9.7</td><td class="hi">104</td><td><span class="tag tag-red">Sobrecarga</span></td></tr>
+<tr style="background:#2a0a0a;"><td><strong>Crash (5-20/jan)</strong></td><td>15</td><td>95→105</td><td>—</td><td class="hi">21→-9</td><td>8.5</td><td>—</td><td><span class="tag tag-red">Crise</span></td></tr>
+<tr><td>Damage control (20/jan-5/fev)</td><td>12</td><td>102→89</td><td>—</td><td class="ok">4→41</td><td>5.0</td><td>—</td><td><span class="tag tag-yellow">Recuperando</span></td></tr>
+<tr style="background:#0a1a0a;"><td>Atual (fev/26)</td><td>—</td><td>89</td><td>48</td><td class="ok">+41</td><td>—</td><td>—</td><td><span class="tag tag-green">Descansada</span></td></tr>
+</table>
+</div>
+
+<h2>🏋️ Prova 300km — Retrospectiva</h2>
+<div class="card full">
+<div class="note note-purple">
+<strong>Resultado:</strong> TSS 634, CTL 108 no dia. Erro estratégico: gastou 176W nos primeiros 80min (plano) e chegou vazia na serra. Potência caiu 33% na segunda metade.<br>
+<strong>Próximo alvo:</strong> Com -9kg e CTL recuperando, estimativa para mesma serra: 48-52min (vs ~70min em set). Estratégia: Z2 (130-150W) até pé da serra, guardar pra subida a 190-200W constante.
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: RECUPERAÇÃO -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-recovery" class="tab-content">
+
+<h2>🔋 Recovery Score (Whoop)</h2>
+<div class="card full">
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val yellow">57%</div><div class="kpi-label">Recovery Médio</div><div class="kpi-sub">12 meses</div></div>
+<div class="kpi"><div class="kpi-val green">36%</div><div class="kpi-label">Dias Green</div><div class="kpi-sub">&gt;67%</div></div>
+<div class="kpi"><div class="kpi-val yellow">48%</div><div class="kpi-label">Dias Yellow</div><div class="kpi-sub">34-66%</div></div>
+<div class="kpi"><div class="kpi-val red">16%</div><div class="kpi-label">Dias Red</div><div class="kpi-sub">&lt;33%</div></div>
+</div>
+<div class="chart-box-lg"><canvas id="chartRecovery"></canvas></div>
+</div>
+
+<div class="grid">
+<div class="card">
+<h3>💓 HRV & Frequência Cardíaca de Repouso</h3>
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val blue">42ms</div><div class="kpi-label">HRV Média</div><div class="kpi-sub">σ 8.6ms</div></div>
+<div class="kpi"><div class="kpi-val orange">62bpm</div><div class="kpi-label">RHR Média</div><div class="kpi-sub">Min 51 / Max 80</div></div>
+</div>
+<div class="chart-box"><canvas id="chartHRV"></canvas></div>
+</div>
+
+<div class="card">
+<h3>🔥 Strain Diário</h3>
+<div class="chart-box"><canvas id="chartStrain"></canvas></div>
+<div class="note note-yellow" style="margin-top:8px;">
+Home office (dez/25): strain semanal 104 — MAIOR que no build-up (97). Natação HR 130-142 + musculação + MTB. Sono total 8.5h mas fragmentado (consistência 45%).
+</div>
+</div>
+</div>
+
+<h2>🔍 Investigação Overtraining</h2>
+<div class="card full">
+<h3 class="red">Diagnóstico: 5 estressores simultâneos sem recovery adequado</h3>
+<div class="grid" style="margin-top:10px;">
+<div class="note note-red"><strong>1. Recovery pós-prova inexistente</strong><br>TSS 634 → "semana de descanso" com TSS 255 no dia 7.</div>
+<div class="note note-red"><strong>2. Cross-training = mais carga</strong><br>9.7 sessões/sem no home office vs 6.1 no build-up.</div>
+<div class="note note-red"><strong>3. Sono fragmentado (não privação)</strong><br>Sono total era 8.5h (com cochilos), mas fragmentado em 2 blocos. Consistência 45%. Ritmo circadiano prejudicado.</div>
+<div class="note note-red"><strong>4. Déficit calórico sem substrato</strong><br>Mounjaro + volume alto. Creatina parou (51%→0%). Ferro irregular.</div>
+</div>
+<div class="note note-yellow" style="margin-top:8px;">
+<strong>5. Volta ao escritório (5/jan):</strong> RHR +4.7bpm, HRV -7.2ms. TSB +11 → -40 em 10 dias. Recovery crashes: 3%, 7%, 9%.
+</div>
+</div>
+
+<div class="card full">
+<h3>🤖 Modelo ML — Feature Importance</h3>
+<div class="note note-blue">
+Acurácia: 46% (vs 33% aleatório). 85% dos dias RED não foram previstos como GREEN (conservador). Top features que determinam recovery:
+</div>
+<div class="chart-box-lg"><canvas id="chartFeatures"></canvas></div>
+</div>
+
+<div class="card full">
+<h3>Recovery por Período</h3>
+<table>
+<tr><th>Período</th><th>Dias</th><th>Recovery</th><th>Crashes</th><th>HRV</th><th>RHR</th><th>Sono</th><th>Sessões/sem</th></tr>
+<tr><td>Build-up</td><td>45</td><td>58%</td><td><span class="tag tag-yellow">2 RED</span></td><td>42ms</td><td>62</td><td>7.1h</td><td>6.1</td></tr>
+<tr style="background:#1a1520;"><td><strong>Prova 300km</strong></td><td>1</td><td>73%</td><td>—</td><td>44ms</td><td>60</td><td>5.8h</td><td>—</td></tr>
+<tr><td>Recovery week</td><td>7</td><td>63%</td><td><span class="tag tag-yellow">2 RED</span></td><td>47ms</td><td>61</td><td>6.9h</td><td>4</td></tr>
+<tr style="background:#1a1010;"><td>Home office</td><td>13</td><td class="warn">52%</td><td><span class="tag tag-red">3+3</span></td><td>49ms</td><td class="ok">59</td><td class="warn">8.5h*</td><td class="hi">9.7</td></tr>
+<tr style="background:#2a0a0a;"><td><strong>Crash</strong></td><td>15</td><td class="hi">47%</td><td><span class="tag tag-red">3+3</span></td><td class="hi">42ms</td><td class="hi">64</td><td>6.5h</td><td>8.5</td></tr>
+<tr><td>Damage control</td><td>12</td><td class="warn">47%</td><td><span class="tag tag-yellow">1+2</span></td><td class="hi">39ms</td><td>64</td><td>7.0h</td><td>5.0</td></tr>
+</table>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: SONO -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-sleep" class="tab-content">
+
+<h2>🌙 Sono — Análise Completa (Noturno + Cochilos)</h2>
+
+<div class="card full">
+<div class="note note-purple">
+<strong>⚠️ Padrão bifásico identificado.</strong> 69 registros classificados como "nap" pelo Whoop — mas <strong>96% ocorrem entre 19h–23h</strong>, com duração média de 112 minutos. Não são cochilos tradicionais: é o primeiro segmento de sono de um padrão bifásico (dorme ~2h à noite, acorda, depois dorme o sono principal). O sono noturno sozinho <strong>subestima</strong> o sono real. Os números abaixo incluem ambos.
+</div>
+</div>
+
+<div class="card full">
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val blue">7.2h</div><div class="kpi-label">Sono Noturno Médio</div><div class="kpi-sub">Sono principal (Whoop)</div></div>
+<div class="kpi"><div class="kpi-val purple">112min</div><div class="kpi-label">Cochilo Médio</div><div class="kpi-sub">69 registros, 96% noturno</div></div>
+<div class="kpi"><div class="kpi-val cyan">8.1h</div><div class="kpi-label">Sono Total (com cochilos)</div><div class="kpi-sub">Nos dias com cochilo</div></div>
+<div class="kpi"><div class="kpi-val yellow">77%</div><div class="kpi-label">Sleep Performance</div><div class="kpi-sub">Média 12 meses</div></div>
+</div>
+<div class="chart-box-lg"><canvas id="chartSleep"></canvas></div>
+</div>
+
+<h2>📊 Cochilos por Período</h2>
+<div class="card full">
+<table>
+<tr><th>Período</th><th>Noturno</th><th>Cochilos</th><th>Freq. Cochilos</th><th>Dur. Cochilo</th><th>TOTAL Real</th><th>Deep Total</th><th>Dívida Sono</th></tr>
+<tr><td>Build-up</td><td class="ok">7.6h</td><td>4 em 45 dias</td><td>0.6/sem</td><td>102min</td><td class="ok">7.7h</td><td>127min</td><td>60min (1.0h)</td></tr>
+<tr><td>Pós-evento</td><td class="ok">8.0h</td><td>0</td><td>—</td><td>—</td><td class="ok">8.0h</td><td>127min</td><td>72min (1.2h)</td></tr>
+<tr style="background:#1a1520;"><td><strong>Home office</strong></td><td>7.2h</td><td class="warn">7 em 13 dias</td><td class="warn">3.8/sem</td><td class="warn">148min</td><td class="ok">8.5h</td><td class="ok">160min</td><td>49min (0.8h)</td></tr>
+<tr><td>Crash</td><td>7.6h</td><td>6 em 15 dias</td><td>2.8/sem</td><td>98min</td><td class="ok">8.2h</td><td class="ok">167min</td><td>52min (0.9h)</td></tr>
+<tr><td>Damage control</td><td>7.4h</td><td>3 em 12 dias</td><td>1.8/sem</td><td>86min</td><td class="ok">7.8h</td><td>145min</td><td class="green">24min (0.4h)</td></tr>
+<tr><td>Atual</td><td>7.0h</td><td>4 em 10 dias</td><td>2.8/sem</td><td>95min</td><td class="ok">7.7h</td><td>153min</td><td>33min (0.6h)</td></tr>
+</table>
+</div>
+
+<div class="grid">
+<div class="card">
+<h3>🔑 Achados sobre o Padrão Bifásico</h3>
+<div class="note note-blue">
+<strong>Não é compensatório — é aditivo.</strong> Em dias com cochilo, o sono noturno mantém 7.2h (vs 7.3h sem cochilo). O cochilo de ~2h à noite é sono <em>extra</em>, não substituição. Resultado: dias com cochilo = ~9h de sono total.
+</div>
+<div class="note note-green" style="margin-top:6px;">
+<strong>Deep sleep do cochilo é significativo.</strong> 42% do cochilo é deep sleep (47min/cochilo). No home office, os cochilos adicionaram 31min/dia de deep sleep — levando o total de 129min pra 160min (o mais alto de todos os períodos).
+</div>
+<div class="note note-yellow" style="margin-top:6px;">
+<strong>Home office: frequência disparou.</strong> 3.8 cochilos/semana (vs 0.6 no build-up) com duração média de 148min (2.5h!). A "liberdade" do home office permitiu o padrão bifásico — mas o <strong>horário fragmentou</strong> a consistência do sono que o Whoop mede (45% — pior do dataset).
+</div>
+</div>
+
+<div class="card">
+<h3>📐 Horário dos Cochilos</h3>
+<div class="chart-box"><canvas id="chartNapHours"></canvas></div>
+<div class="note note-purple" style="margin-top:8px;">
+96% dos "cochilos" são entre 19h–23h. Pico às 21h (26 registros). Isso é sono noturno fragmentado — <strong>não cochilo diurno</strong>. O Whoop classifica como nap porque acontece antes do sono principal detectado.
+</div>
+</div>
+</div>
+
+<h2>🔄 Correção da Narrativa</h2>
+<div class="card full">
+<div class="grid">
+<div class="note note-red">
+<h4>❌ Leitura anterior (sem cochilos)</h4>
+"Home office: 5.4h de sono, REM 79min, consistência 45%. Sono destruiu tudo."<br><br>
+O overtraining era explicado primariamente pelo sono insuficiente.
+</div>
+<div class="note note-green">
+<h4>✅ Leitura corrigida (com cochilos)</h4>
+"Home office: 8.5h de sono total, deep 160min (melhor do dataset). Mas <strong>consistência horária 45%</strong> e sono fragmentado em 2 blocos."<br><br>
+<strong>O problema não era quantidade — era fragmentação.</strong> Sono bifásico pode ser funcional, mas a irregularidade horária prejudica ritmo circadiano, secreção de GH (pico 23h-1h) e qualidade do sono profundo contínuo.
+</div>
+</div>
+<div class="note note-yellow" style="margin-top:8px;">
+<strong>Implicação para o overtraining:</strong> Sono total era adequado. O crash de recovery no home office/escritório foi mais por: (1) carga excessiva (9.7 sessões/sem), (2) déficit calórico sem substrato, (3) fragmentação circadiana — e menos por privação de sono pura. A policitemia (Hct 53.7%) e cortisol esgotado (8.49) foram os drivers fisiológicos primários.
+</div>
+</div>
+
+<h2>📈 Deep Sleep: Contribuição dos Cochilos</h2>
+<div class="card full">
+<div class="chart-box-lg"><canvas id="chartDeepContrib"></canvas></div>
+</div>
+
+<h2>💤 Dívida de Sono (estimativa Whoop)</h2>
+<div class="card full">
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val yellow">60min</div><div class="kpi-label">Build-up</div><div class="kpi-sub">Perf 78%</div></div>
+<div class="kpi"><div class="kpi-val yellow">49min</div><div class="kpi-label">Home office</div><div class="kpi-sub">Perf 73%</div></div>
+<div class="kpi"><div class="kpi-val yellow">52min</div><div class="kpi-label">Crash</div><div class="kpi-sub">Perf 77%</div></div>
+<div class="kpi"><div class="kpi-val green">24min</div><div class="kpi-label">Damage ctrl</div><div class="kpi-sub">Perf 80%</div></div>
+</div>
+<div class="note note-blue">
+A dívida de sono do Whoop é calculada sobre o sono principal (não inclui cochilos totalmente). Performance de 73% no home office reflete a fragmentação, não a quantidade — o corpo dormiu bastante mas de forma irregular.
+</div>
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: EXAMES -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-health" class="tab-content">
+
+<h2>🩸 Evolução dos Marcadores</h2>
+
+<!-- Série Vermelha + Ferro -->
+<div class="card full">
+<h3 class="red">Série Vermelha + Ferro — Hemax × Noripurum × Bypass</h3>
+<table>
+<tr><th>Marcador</th><th>Set/25</th><th>Nov/25</th><th>Jan/26</th><th>Fev/26</th><th>Ref</th><th>Nota</th></tr>
+<tr><td>Hemácias (M/µL)</td><td>—</td><td>—</td><td class="hi">6.46</td><td class="warn">5.77</td><td>3.9–5.3</td><td>Caindo, ainda alto</td></tr>
+<tr><td>Hemoglobina (g/dL)</td><td>—</td><td>—</td><td class="hi">17.5</td><td class="ok">15.6</td><td>12–16</td><td>Normalizada ✓</td></tr>
+<tr><td>Hematócrito (%)</td><td>—</td><td>49.8</td><td class="hi">53.7</td><td class="ok">46.6</td><td>36–48</td><td>Normalizado ✓</td></tr>
+<tr><td>RDW (%)</td><td>—</td><td>—</td><td>—</td><td class="hi">16.7</td><td>11–14.5</td><td>Anisocitose — transição</td></tr>
+<tr><td>Ferritina (ng/mL)</td><td class="lo">9.5</td><td>—</td><td class="warn">26.1</td><td class="ok">93.7</td><td>10–291</td><td>Noripurum IV funcionou ✓</td></tr>
+<tr><td>Sat. Transferrina (%)</td><td>—</td><td>—</td><td>—</td><td class="hi">57.3</td><td>15–50</td><td>Ferro excedente</td></tr>
+</table>
+<div class="note note-purple">
+<strong>Bypass context:</strong> Ferro oral (Hemax) ≈ absorção zero. Reposição real veio dos 2 Noripurum IV (nov+dez). Ferritina 9.5→93.7. Saturação 57% é transitória — corpo desacelerou eritropoiese enquanto estoque de ferro dos IVs ainda circula. RDW alto = hemácias novas (maiores) + velhas (menores). Normaliza em 2-3 meses.
+</div>
+</div>
+
+<div class="grid">
+<!-- Metabolico -->
+<div class="card">
+<h3 class="blue">Metabólico — Mounjaro + Bypass</h3>
+<table>
+<tr><th>Marcador</th><th>Nov/25</th><th>Jan/26</th><th>Fev/26</th><th>Ref</th></tr>
+<tr><td>Glicose</td><td>91</td><td>87</td><td class="ok">83</td><td>&lt;99</td></tr>
+<tr><td>HbA1c</td><td>—</td><td>5.2</td><td class="warn">5.6</td><td>4.2–6.0</td></tr>
+<tr><td>Insulina</td><td>2.44</td><td class="lo">2.25</td><td class="lo">1.91</td><td>3.0–25.0</td></tr>
+<tr><td>HOMA-IR</td><td>0.5</td><td>0.5</td><td class="ok">0.4</td><td>&lt;3.0</td></tr>
+</table>
+<div class="note note-blue">HbA1c 5.2→5.6 provavelmente artefato da anisocitose/turnover de hemácias. Glicose 83 + HOMA-IR 0.4 = metabolismo excelente.</div>
+</div>
+
+<!-- Hormonal -->
+<div class="card">
+<h3 class="purple">Hormonal</h3>
+<table>
+<tr><th>Marcador</th><th>Set</th><th>Nov</th><th>Jan</th><th>Fev</th><th>Ref</th></tr>
+<tr><td>Testosterona T.</td><td>22.6</td><td class="hi">58.7</td><td>28.8</td><td>33.6</td><td>8–35</td></tr>
+<tr><td>Testost. Livre</td><td>6.49</td><td class="hi">17.16</td><td>—</td><td>6.49</td><td>1–11</td></tr>
+<tr><td>SHBG</td><td>—</td><td class="lo">9.69</td><td>46.86</td><td>31.28</td><td>17.7–138</td></tr>
+<tr><td>Cortisol</td><td>9.87</td><td class="hi">18.40</td><td class="warn">8.49</td><td>9.09</td><td>5.27–22.45</td></tr>
+</table>
+<div class="note note-green">Eixo normalizado. T. livre voltou à baseline (6.49). SHBG normalizada. Cortisol estável.</div>
+</div>
+
+<!-- Lipidico -->
+<div class="card">
+<h3 class="yellow">Lipídico</h3>
+<table>
+<tr><th>Marcador</th><th>Nov</th><th>Jan</th><th>Fev</th><th>Ref</th></tr>
+<tr><td>Col. Total</td><td>160</td><td>150</td><td class="ok">148</td><td>&lt;190</td></tr>
+<tr><td>LDL</td><td>113</td><td>97</td><td class="ok">100</td><td>&lt;130</td></tr>
+<tr><td>HDL</td><td class="lo">32</td><td class="lo">39</td><td class="lo">37</td><td>&gt;40</td></tr>
+<tr><td>Triglicerídeos</td><td>76</td><td>71</td><td class="ok">56</td><td>&lt;150</td></tr>
+</table>
+<div class="note note-yellow">HDL crônico &lt;40 em 4 exames. Provável: bypass + déficit calórico + histórico andrógenos.</div>
+</div>
+
+<!-- Vitaminas -->
+<div class="card">
+<h3 class="green">Vitaminas & Minerais (bypass context)</h3>
+<table>
+<tr><th>Marcador</th><th>Set</th><th>Nov</th><th>Jan</th><th>Fev</th><th>Ref</th></tr>
+<tr><td>Vit D</td><td>63.3</td><td>71.0</td><td>111.1</td><td class="ok">77.7</td><td>&gt;20</td></tr>
+<tr><td>Vit B12</td><td class="warn">311</td><td>1287</td><td>390</td><td>371</td><td>211–911</td></tr>
+<tr><td>Vit A</td><td>—</td><td>—</td><td>—</td><td class="warn">0.35</td><td>0.30–0.70</td></tr>
+<tr><td>Cálcio</td><td>9.2</td><td>9.5</td><td>9.7</td><td class="warn">9.1</td><td>8.3–10.6</td></tr>
+</table>
+<div class="note note-purple">Vit A no limite inferior — típico pós-bypass. B12 oscila com IM (pico 1287→371). Cálcio tendência queda — pedir PTH no próximo.</div>
+</div>
+</div>
+
+<!-- Charts -->
+<div class="grid">
+<div class="card"><h3>Ferritina</h3><div class="chart-box"><canvas id="chartFerritin"></canvas></div></div>
+<div class="card"><h3>Hematócrito</h3><div class="chart-box"><canvas id="chartHematocrit"></canvas></div></div>
+<div class="card"><h3>HDL</h3><div class="chart-box"><canvas id="chartHDL"></canvas></div></div>
+<div class="card"><h3>Testosterona Total</h3><div class="chart-box"><canvas id="chartTestosterone"></canvas></div></div>
+</div>
+
+<!-- Lab × Whoop crossref -->
+<h2>🔗 Lab × Whoop/Garmin</h2>
+<div class="card full">
+<div class="grid">
+<div class="note note-red"><strong>Hct 53.7% (jan) × RHR elevado</strong><br>Sangue viscoso → coração trabalha mais → RHR sobe. Com Hct normalizado (46.6%), se RHR cair = era hematológico.</div>
+<div class="note note-red"><strong>Cortisol 8.49 (jan) × Crashes 3%, 7%, 9%</strong><br>Eixo HPA fadigado = capacidade de recuperação hormonal reduzida.</div>
+<div class="note note-yellow"><strong>Insulina 1.91 + bypass + Mounjaro</strong><br>Triplo: bypass + Mounjaro + insulina baixa = sem substrato pra recovery. Treinos pesados geraram crashes desproporcionais.</div>
+<div class="note note-green"><strong>Ferritina 94 → performance futura</strong><br>De 9.5 (borderline anemia) pra 94. Transporte de O₂ restaurado. EF e decoupling devem melhorar em 4-6 semanas.</div>
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: CROSSOVER Lab × Wearables × Training -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-crossover" class="tab-content">
+
+<h2>🔗 Crossover: Lab × Wearables × Carga</h2>
+
+<div class="card full">
+<div class="note note-purple">
+Cruzamento de marcadores laboratoriais com dados de wearables (Whoop/Garmin) para identificar relações causais vs correlações. Contexto: bypass Roux-en-Y (2013) altera absorção — ferro oral ≈0, lipossolúveis reduzidas.
+</div>
+</div>
+
+<!-- Crossover #1: Policitemia × Cardio -->
+<div class="card full">
+<h3 class="red">1. Policitemia (Hct 53.7%) × Performance Cardíaca</h3>
+<div class="grid">
+<div>
+<h4>Evidência Lab (Jan/26)</h4>
+<table>
+<tr><td>Hematócrito</td><td class="hi">53.7%</td><td>ref 36–48%</td></tr>
+<tr><td>Hemácias</td><td class="hi">6.46 M/µL</td><td>ref 3.9–5.3</td></tr>
+<tr><td>Hemoglobina</td><td class="hi">17.5 g/dL</td><td>ref 12–16</td></tr>
+</table>
+<div class="note note-red" style="margin-top:8px;">Sangue viscoso → coração precisa de mais força pra bombear → RHR sobe, EF cai, recovery compromete.</div>
+</div>
+<div>
+<h4>Evidência Wearable (Jan/26)</h4>
+<table>
+<tr><td>RHR</td><td class="hi">64 bpm</td><td>baseline 62</td></tr>
+<tr><td>RHR máxima</td><td class="hi">73 bpm</td><td>pior do dataset</td></tr>
+<tr><td>HRV</td><td class="hi">42 ms</td><td>caindo</td></tr>
+<tr><td>Recovery crashes</td><td class="hi">3%, 7%, 9%</td><td>3 em 15 dias</td></tr>
+</table>
+</div>
+</div>
+<div class="chart-box"><canvas id="chartCrossHct"></canvas></div>
+<div class="note note-green" style="margin-top:6px;">
+<strong>Validação (Fev/26):</strong> Hct caiu pra 46.6%. Se RHR cair nas próximas semanas → confirma que policitemia era driver primário do estresse cardíaco. Monitorar EF e decoupling no Garmin.
+</div>
+</div>
+
+<!-- Crossover #2: Cortisol × Recovery -->
+<div class="card full">
+<h3 class="orange">2. Cortisol Esgotado × Recovery Crashes</h3>
+<div class="grid">
+<div>
+<h4>Lab Timeline</h4>
+<table>
+<tr><td>Set/25 (baseline)</td><td class="ok">9.87 µg/dL</td></tr>
+<tr><td>Nov/25 (pico build-up)</td><td class="hi">18.40 µg/dL</td></tr>
+<tr><td>Jan/26 (crash)</td><td class="warn">8.49 µg/dL</td></tr>
+<tr><td>Fev/26 (recovery)</td><td class="ok">9.09 µg/dL</td></tr>
+</table>
+</div>
+<div>
+<h4>Whoop Recovery</h4>
+<table>
+<tr><td>Build-up (out–dez)</td><td>58% avg</td><td>2 RED</td></tr>
+<tr><td>Crash (jan)</td><td class="hi">47% avg</td><td class="hi">3 crashes + 3 RED</td></tr>
+<tr><td>Damage ctrl</td><td class="warn">47% avg</td><td>1 crash + 2 RED</td></tr>
+<tr><td>Atual</td><td class="ok">52% avg</td><td>estabilizando</td></tr>
+</table>
+</div>
+</div>
+<div class="note note-yellow">
+Cortisol 18.4→8.49 é esgotamento do eixo HPA — corpo gastou a reserva de estresse. Recovery <15% (crashes) concentrou exatamente quando cortisol estava no fundo. Com cortisol voltando a 9.09, espera-se melhora gradual de recovery.
+</div>
+</div>
+
+<!-- Crossover #3: Ferro × Capacidade Aeróbia -->
+<div class="card full">
+<h3 class="green">3. Repleção de Ferro × Capacidade Aeróbia (Projeção)</h3>
+<div class="grid">
+<div>
+<h4>Evolução Ferritina</h4>
+<table>
+<tr><td>Set/25</td><td class="lo">9.5 ng/mL</td><td>Borderline anemia</td></tr>
+<tr><td>Nov/25</td><td>—</td><td>1º Noripurum IV</td></tr>
+<tr><td>Dez/25</td><td>—</td><td>2º Noripurum IV</td></tr>
+<tr><td>Jan/26</td><td class="warn">26.1 ng/mL</td><td>Subindo</td></tr>
+<tr><td>Fev/26</td><td class="ok">93.7 ng/mL</td><td>Normal ✓</td></tr>
+</table>
+</div>
+<div>
+<h4>Impacto Esperado no Garmin</h4>
+<table>
+<tr><th>Métrica</th><th>Antes (ferro baixo)</th><th>Esperado (4-6 sem)</th></tr>
+<tr><td>EF (Efficiency Factor)</td><td>Declinante</td><td>↑ mais W/bpm</td></tr>
+<tr><td>Decoupling</td><td>>5% frequente</td><td>↓ pra <3%</td></tr>
+<tr><td>VO₂ estimado</td><td>Estagnado</td><td>↑ com mais O₂</td></tr>
+<tr><td>VAM em subida</td><td>Limitada</td><td>↑ +10-15% (c/ -9kg)</td></tr>
+</table>
+</div>
+</div>
+<div class="note note-green">
+Ferritina 9.5→93.7 = transporte de O₂ restaurado. Hemácias novas (RDW 16.7%, anisocitose) estão sendo produzidas com ferro adequado. Em 4-6 semanas, as métricas de Garmin devem refletir: melhor EF, menor decoupling, mais potência sustentada. <strong>Combinado com -9kg, W/kg deve subir ~25-30% no limiar.</strong>
+</div>
+</div>
+
+<!-- Crossover #4: Insulina × Substrato de Recovery -->
+<div class="card full">
+<h3 class="yellow">4. Triplo Déficit de Substrato × Recovery</h3>
+<div class="grid-3">
+<div class="note note-red"><strong>Bypass:</strong> absorção ferro/B12/Ca/lipossolúveis permanentemente reduzida. Qualquer aumento de demanda metabólica amplifica déficits.</div>
+<div class="note note-red"><strong>Mounjaro:</strong> insulina caiu 2.25→1.91 (abaixo ref). Suprime apetite + reduz secreção insulínica. Sem substrato calórico pra recovery muscular.</div>
+<div class="note note-red"><strong>Volume:</strong> 9.7 sessões/sem no home office. Demanda de reparo >> oferta de substrato. Creatina parou (51%→0%), ferro irregular (44%→0%).</div>
+</div>
+<div class="note note-yellow" style="margin-top:8px;">
+<strong>Modelo ML confirmou:</strong> total_wo_strain_roll7 (carga total 7 dias) é 2ª feature mais importante pra prever recovery. Não foi uma atividade isolada — foi acúmulo sem reparo.
+</div>
+</div>
+
+<!-- Crossover #5: Sono bifásico × Métricas -->
+<div class="card full">
+<h3 class="purple">5. Sono Bifásico × Métricas do Whoop</h3>
+<div class="grid">
+<div>
+<h4>O que o Whoop mede</h4>
+<table>
+<tr><td>Sono noturno (principal)</td><td>✅ Completo</td></tr>
+<tr><td>Cochilos (pré-sono)</td><td>⚠️ Classificados como "nap"</td></tr>
+<tr><td>Consistência horária</td><td>⚠️ Penalizada pela fragmentação</td></tr>
+<tr><td>Sleep performance</td><td>⚠️ Subestimada (não soma naps)</td></tr>
+</table>
+</div>
+<div>
+<h4>Realidade</h4>
+<table>
+<tr><td>Home office noturno</td><td>7.2h</td></tr>
+<tr><td>Home office + cochilos</td><td class="ok"><strong>8.5h</strong></td></tr>
+<tr><td>Deep sleep (night+nap)</td><td class="ok"><strong>160min</strong> (melhor)</td></tr>
+<tr><td>Consistência Whoop</td><td class="hi">45%</td></tr>
+</table>
+</div>
+</div>
+<div class="note note-purple">
+O Whoop subestima o sono total e penaliza o padrão bifásico na consistência. Recovery score pode estar artificialmente baixo nos períodos de home office por causa dessa classificação. Implicação: o "crash" de recovery no home office é parcialmente artefato de medição — mas a fragmentação circadiana é real e afeta secreção de GH.
+</div>
+</div>
+
+<!-- Crossover Matrix -->
+<h2>🧬 Matriz de Interações</h2>
+<div class="card full" style="overflow-x:auto;">
+<table>
+<tr><th></th><th>Policitemia</th><th>Cortisol baixo</th><th>Ferro depletado</th><th>Insulina baixa</th><th>Sono fragment.</th><th>Carga excessiva</th></tr>
+<tr><td><strong>RHR ↑</strong></td><td class="hi">●●●</td><td class="warn">●●</td><td class="warn">●</td><td></td><td class="warn">●</td><td class="hi">●●●</td></tr>
+<tr><td><strong>HRV ↓</strong></td><td class="warn">●●</td><td class="hi">●●●</td><td></td><td></td><td class="hi">●●●</td><td class="hi">●●●</td></tr>
+<tr><td><strong>Recovery crash</strong></td><td class="warn">●●</td><td class="hi">●●●</td><td class="warn">●●</td><td class="warn">●●</td><td class="warn">●●</td><td class="hi">●●●</td></tr>
+<tr><td><strong>EF ↓</strong></td><td class="hi">●●●</td><td></td><td class="hi">●●●</td><td></td><td></td><td class="warn">●●</td></tr>
+<tr><td><strong>Decoupling ↑</strong></td><td class="hi">●●●</td><td></td><td class="hi">●●●</td><td></td><td></td><td class="warn">●</td></tr>
+</table>
+<div class="note note-blue" style="margin-top:6px;">●●● = impacto primário, ●● = contribui, ● = influência menor. A convergência de 6 estressores simultâneos explica por que o crash foi tão severo: cada fator amplificava os outros.</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: ÚLTIMO TREINO (reads from last_ride_analysis.json) -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-ride" class="tab-content">
+
+<h2>🔄 APGIA — Análise Pós-Treino</h2>
+
+<!-- Sub-tabs within APGIA -->
+<div class="tab-sub" id="apgia-subtabs">
+<button class="active" onclick="showApgiaSub('upload')">📤 Input</button>
+<button onclick="showApgiaSub('analysis')">📊 Análise</button>
+<button onclick="showApgiaSub('history')">📋 Histórico</button>
+<button onclick="showApgiaSub('lab-input')">🩸 Exames</button>
+</div>
+
+<!-- ── SUB: UPLOAD / INPUT ── -->
+<div id="apgia-upload" class="apgia-sub">
+
+<div class="grid">
+<div class="card">
+<h3>📤 Upload .fit</h3>
+<div class="drop-zone" id="fit-drop" onclick="document.getElementById('fit-file').click()">
+<div class="icon">🚴</div>
+<div>Arrasta um .fit aqui ou clica pra selecionar</div>
+<div class="dim" style="font-size:11px; margin-top:6px;">Garmin Connect → Atividade → ⚙️ → Exportar .fit</div>
+</div>
+<input type="file" id="fit-file" accept=".fit,.FIT" style="display:none" onchange="handleFitUpload(this.files[0])">
+<div id="fit-status" style="margin-top:8px;"></div>
+</div>
+
+<div class="card">
+<h3>✏️ Input Manual</h3>
+<div class="form-row">
+<div class="form-group"><label>Data</label><input type="date" id="m-date"></div>
+<div class="form-group"><label>Tipo</label><select id="m-type"><option>road</option><option>mtb</option><option>indoor</option><option>gravel</option></select></div>
+</div>
+<div class="form-row-3">
+<div class="form-group"><label>Duração (min)</label><input type="number" id="m-dur" placeholder="90"></div>
+<div class="form-group"><label>Distância (km)</label><input type="number" id="m-dist" placeholder="60" step="0.1"></div>
+<div class="form-group"><label>Elevação (m)</label><input type="number" id="m-elev" placeholder="800"></div>
+</div>
+<div class="form-row-3">
+<div class="form-group"><label>Potência média (W)</label><input type="number" id="m-avgw" placeholder="180"></div>
+<div class="form-group"><label>NP (W)</label><input type="number" id="m-np" placeholder="195"></div>
+<div class="form-group"><label>TSS</label><input type="number" id="m-tss" placeholder="auto"></div>
+</div>
+<div class="form-row-3">
+<div class="form-group"><label>FC média</label><input type="number" id="m-avghr" placeholder="145"></div>
+<div class="form-group"><label>FC max</label><input type="number" id="m-maxhr" placeholder="175"></div>
+<div class="form-group"><label>Cadência</label><input type="number" id="m-cad" placeholder="85"></div>
+</div>
+<div class="form-row">
+<div class="form-group"><label>RPE (1-10)</label><input type="range" id="m-rpe" min="1" max="10" value="5" oninput="this.nextElementSibling.textContent=this.value"><span style="margin-left:8px;">5</span></div>
+<div class="form-group"><label>Sensação</label><select id="m-feel"><option>great</option><option>good</option><option selected>ok</option><option>tired</option><option>bad</option></select></div>
+</div>
+<div class="form-group"><label>Notas</label><input type="text" id="m-notes" placeholder="Observações do treino..."></div>
+<div class="form-row">
+<div class="form-group"><label>Recovery Whoop (%)</label><input type="number" id="m-rec" placeholder="Ex: 65"></div>
+<div class="form-group"><label>HRV (ms)</label><input type="number" id="m-hrv" placeholder="Ex: 45"></div>
+</div>
+<button class="btn btn-blue" onclick="submitManualRide()" style="width:100%; margin-top:8px;">Analisar Treino</button>
+</div>
+</div>
+
+<div class="card full">
+<h3>📤 Upload Whoop CSV</h3>
+<div class="form-row">
+<div>
+<div class="drop-zone" id="whoop-drop" onclick="document.getElementById('whoop-file').click()" style="padding:15px;">
+<div>🟢 Arrasta sleeps.csv / physiological_cycles.csv / workouts.csv</div>
+</div>
+<input type="file" id="whoop-file" accept=".csv" style="display:none" onchange="handleWhoopCSV(this.files[0])">
+</div>
+<div id="whoop-status" class="dim" style="padding:10px;"></div>
+</div>
+</div>
+</div>
+
+<!-- ── SUB: ANALYSIS ── -->
+<div id="apgia-analysis" class="apgia-sub" style="display:none;">
+
+<div id="ride-empty" class="card full">
+<div class="note note-blue">Nenhum treino analisado ainda. Suba um .fit ou use input manual na aba "📤 Input".</div>
+</div>
+
+<div id="ride-content" style="display:none;">
+<h2 id="ride-title">🔄 Treino</h2>
+
+<div class="card full">
+<div class="kpi-row" id="ride-kpis"></div>
+</div>
+
+<div class="grid">
+<div class="card">
+<h3>⚡ Métricas do Treino</h3>
+<table id="ride-metrics"></table>
+</div>
+<div class="card">
+<h3>📊 Estado Pré-Treino</h3>
+<table id="ride-state"></table>
+</div>
+</div>
+
+<div class="grid">
+<div class="card">
+<h3>💥 Impacto Estimado</h3>
+<div id="ride-impact"></div>
+</div>
+<div class="card">
+<h3>📋 Sugestões</h3>
+<div id="ride-suggestions"></div>
+</div>
+</div>
+
+<div class="card full" id="ride-lab-card" style="display:none;">
+<h3>🩸 Contexto Lab (±60 dias do treino)</h3>
+<div id="ride-lab"></div>
+</div>
+</div>
+</div>
+
+<!-- ── SUB: HISTORY ── -->
+<div id="apgia-history" class="apgia-sub" style="display:none;">
+<div class="card full">
+<h3>📋 Treinos Registrados</h3>
+<div id="ride-history-list"><div class="dim">Nenhum treino registrado ainda.</div></div>
+<div style="margin-top:12px;">
+<button class="btn btn-dim" onclick="exportRideHistory()">📥 Exportar JSON</button>
+<button class="btn btn-dim" onclick="if(confirm('Limpar todo o histórico?')){localStorage.removeItem('apgia_rides');renderHistory();}">🗑️ Limpar</button>
+</div>
+</div>
+</div>
+
+<!-- ── SUB: LAB INPUT ── -->
+<div id="apgia-lab-input" class="apgia-sub" style="display:none;">
+<div class="card full">
+<h3>🩸 Registrar Exame de Sangue</h3>
+<div class="note note-blue" style="margin-bottom:12px;">Registre marcadores chave. Serão cruzados automaticamente com treinos ±60 dias.</div>
+<div class="form-group"><label>Data do exame</label><input type="date" id="lab-date"></div>
+
+<h4 style="margin:12px 0 8px; color:var(--red);">Série Vermelha / Ferro</h4>
+<div class="form-row-3">
+<div class="form-group"><label>Hemácias (M/µL)</label><input type="number" id="lab-hemacias" step="0.01" placeholder="5.1"></div>
+<div class="form-group"><label>Hemoglobina (g/dL)</label><input type="number" id="lab-hb" step="0.1" placeholder="14.5"></div>
+<div class="form-group"><label>Hematócrito (%)</label><input type="number" id="lab-hct" step="0.1" placeholder="45"></div>
+</div>
+<div class="form-row-3">
+<div class="form-group"><label>Ferritina (ng/mL)</label><input type="number" id="lab-ferr" step="0.1" placeholder="94"></div>
+<div class="form-group"><label>Sat. Transferrina (%)</label><input type="number" id="lab-sattr" step="0.1" placeholder="40"></div>
+<div class="form-group"><label>RDW (%)</label><input type="number" id="lab-rdw" step="0.1" placeholder="14"></div>
+</div>
+
+<h4 style="margin:12px 0 8px; color:var(--yellow);">Metabólico</h4>
+<div class="form-row-3">
+<div class="form-group"><label>Glicose (mg/dL)</label><input type="number" id="lab-glic" placeholder="85"></div>
+<div class="form-group"><label>HbA1c (%)</label><input type="number" id="lab-a1c" step="0.1" placeholder="5.4"></div>
+<div class="form-group"><label>Insulina (µUI/mL)</label><input type="number" id="lab-ins" step="0.01" placeholder="3.0"></div>
+</div>
+
+<h4 style="margin:12px 0 8px; color:var(--purple);">Hormonal</h4>
+<div class="form-row-3">
+<div class="form-group"><label>Cortisol (µg/dL)</label><input type="number" id="lab-cort" step="0.01" placeholder="10"></div>
+<div class="form-group"><label>TST Total (ng/dL)</label><input type="number" id="lab-tst" step="0.1" placeholder="30"></div>
+<div class="form-group"><label>Vit D (ng/mL)</label><input type="number" id="lab-vitd" step="0.1" placeholder="70"></div>
+</div>
+<div class="form-row-3">
+<div class="form-group"><label>Vit B12 (pg/mL)</label><input type="number" id="lab-b12" placeholder="400"></div>
+<div class="form-group"><label>HDL (mg/dL)</label><input type="number" id="lab-hdl" placeholder="42"></div>
+<div class="form-group"><label>Cálcio (mg/dL)</label><input type="number" id="lab-ca" step="0.1" placeholder="9.3"></div>
+</div>
+
+<button class="btn btn-purple" onclick="submitLab()" style="width:100%; margin-top:12px;">Salvar Exame</button>
+<div id="lab-status" style="margin-top:8px;"></div>
+</div>
+
+<div class="card full">
+<h3>Exames Registrados</h3>
+<div id="lab-history-list"><div class="dim">Nenhum exame registrado.</div></div>
+</div>
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: ANÁLISE DE TREINO (Projeto completo) -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-training" class="tab-content">
+
+<h2>🏋️ Análise do Projeto de Dados</h2>
+
+<div class="card full">
+<div class="note note-blue">
+Este projeto começou como exercício prático do plano de estudos AI Executive — construir um pipeline de dados real em vez de só estudar teoria. O ciclismo foi o veículo, não o destino. Abaixo: o que foi construído, o que foi aprendido, e como se conecta ao plano de estudos.
+</div>
+</div>
+
+<div class="grid">
+<div class="card">
+<h3>📊 Dataset Construído</h3>
+<table>
+<tr><th>Fonte</th><th>Período</th><th>Volume</th></tr>
+<tr><td>Garmin .fit (cycling)</td><td>2022–2026</td><td>~3.3M registros/s</td></tr>
+<tr><td>Garmin sessions</td><td>2022–2026</td><td>~800 atividades</td></tr>
+<tr><td>Whoop physio</td><td>Fev/25–Fev/26</td><td>371 dias × 15 métricas</td></tr>
+<tr><td>Whoop sleep</td><td>Fev/25–Fev/26</td><td>369 noites + 69 naps</td></tr>
+<tr><td>Whoop workouts</td><td>Fev/25–Fev/26</td><td>~500 atividades</td></tr>
+<tr><td>Whoop journal</td><td>Fev/25–Fev/26</td><td>19 perguntas diárias</td></tr>
+<tr><td>Lab results</td><td>Set/25–Fev/26</td><td>4 exames, 55+ marcadores</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h3>⚙️ Pipeline Desenvolvido</h3>
+<table>
+<tr><th>Script</th><th>Função</th></tr>
+<tr><td>process_fit.py</td><td>.fit → CSV (extração, limpeza, normalização)</td></tr>
+<tr><td>compute_pmc.py</td><td>PMC: CTL, ATL, TSB com decay exponencial</td></tr>
+<tr><td>compute_power_curve.py</td><td>Curva de potência (best efforts por duração)</td></tr>
+<tr><td>compute_zones.py</td><td>Zonas de treino baseadas em FTP</td></tr>
+<tr><td>lab_results.py</td><td>Normalização de exames com referências</td></tr>
+<tr><td>analyze_new_exam.py</td><td>Análise incremental de exame novo</td></tr>
+<tr><td>merge_health_data.py</td><td>Merge lab + whoop + garmin</td></tr>
+<tr><td>generate_dashboard.py</td><td>Geração do dashboard HTML</td></tr>
+</table>
+</div>
+</div>
+
+<h2>🧠 O que o Projeto Ensinou (Conexão com Plano AI Executive)</h2>
+
+<div class="grid">
+<div class="card">
+<h3>Módulo 1.2 — Embeddings & Dados Estruturados</h3>
+<div class="note note-green">
+<strong>Prática:</strong> Normalização de 55 marcadores de sangue com categorias, unidades, referências — cada marker é essencialmente um "embedding" de saúde com dimensões clínicas.<br>
+<strong>Aprendizado:</strong> Feature engineering real: transformar dados heterogêneos (lab mensal, wearable diário, GPS por segundo) em dataset unificado com forward-fill, interpolação, e janelas temporais.
+</div>
+</div>
+
+<div class="card">
+<h3>Módulo 1.3 — Overfitting & Validação</h3>
+<div class="note note-green">
+<strong>Prática:</strong> Modelo de classificação de recovery (Random Forest) com accuracy 46% (vs 33% random). Confusion matrix mostrou viés conservador: 85% dos RED não previstos como GREEN.<br>
+<strong>Aprendizado:</strong> Accuracy baixa ≠ modelo inútil. A matriz de confusão e o contexto de negócio definem se o modelo serve. Neste caso, "nunca dizer que tá tudo bem quando tá mal" (precision on RED) é mais importante que accuracy geral.
+</div>
+</div>
+
+<div class="card">
+<h3>Módulo 3.1 — TCO & Data Pipeline</h3>
+<div class="note note-green">
+<strong>Prática:</strong> Pipeline completo: extração (.fit → CSV), transformação (limpeza, normalização, outlier handling), load (CSVs processados). Versionamento com Git. Dependências travadas (numpy 1.26.4).<br>
+<strong>Aprendizado:</strong> O custo real de um pipeline não é compute — é manutenção: DLL blocking, venv corrompido, formato de data, encoding. Exatamente o "custo invisível" que aparece em TCO de AI.
+</div>
+</div>
+
+<div class="card">
+<h3>Módulo 3.2 — Avaliação de Modelos</h3>
+<div class="note note-green">
+<strong>Prática:</strong> Feature importance (permutation) revelou que recovery_delta7 e total_wo_strain_roll7 são os preditores dominantes — não métricas "óbvias" como HRV.<br>
+<strong>Aprendizado:</strong> Interpretabilidade > accuracy para decisão executiva. Saber POR QUE o modelo decide é mais valioso que o score final.
+</div>
+</div>
+
+<div class="card">
+<h3>Módulo 4.1 — Business Case</h3>
+<div class="note note-green">
+<strong>Prática:</strong> O "business case" aqui é saúde pessoal: o pipeline identificou 5 estressores simultâneos causando overtraining que não eram óbvios isoladamente. Sem o cruzamento de dados, a narrativa era "sono destruiu tudo" — com dados, era "carga + déficit + fragmentação + policitemia + cortisol".<br>
+<strong>Aprendizado:</strong> Dados mudam narrativas. O insight de corrigir "sono 5.4h" para "sono 8.5h bifásico" só veio da análise dos naps — demonstra que data quality e completude mudam conclusões.
+</div>
+</div>
+
+<div class="card">
+<h3>Módulos 2.x — Segurança & Governança</h3>
+<div class="note note-yellow">
+<strong>Prática:</strong> Dados de saúde (LGPD sensível), fitness (pessoal), labresults (médico). Armazenamento local, sem cloud. GDPR export do Garmin. Separação raw/processed.<br>
+<strong>Ponto:</strong> Em ambiente corporativo, esse pipeline precisaria de consentimento, retenção, right-to-delete, e controle de acesso por categoria de dado.
+</div>
+</div>
+</div>
+
+<h2>📐 Métricas do Projeto</h2>
+<div class="card full">
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val blue">3.3M</div><div class="kpi-label">Registros GPS</div><div class="kpi-sub">Por segundo, 4 anos</div></div>
+<div class="kpi"><div class="kpi-val purple">371</div><div class="kpi-label">Dias Whoop</div><div class="kpi-sub">15 métricas/dia</div></div>
+<div class="kpi"><div class="kpi-val green">55+</div><div class="kpi-label">Marcadores Lab</div><div class="kpi-sub">4 exames</div></div>
+<div class="kpi"><div class="kpi-val orange">8</div><div class="kpi-label">Scripts Pipeline</div><div class="kpi-sub">ETL completo</div></div>
+<div class="kpi"><div class="kpi-val cyan">107</div><div class="kpi-label">Colunas Merged</div><div class="kpi-sub">Dataset unificado</div></div>
+</div>
+</div>
+
+<h2>🔮 Próximos Passos</h2>
+<div class="card full">
+<div class="grid-3">
+<div>
+<h3 class="blue">Dados</h3>
+<div style="font-size:12px; line-height:1.8;">
+• Garmin GDPR export (até 30 dias) → peso, composição corporal, VO₂<br>
+• Recontrole lab mar/26 → hemograma + ferritina + sat. transf + PTH<br>
+• Whoop mensal → re-export e re-merge<br>
+• Treinos novos → process_fit.py → PMC atualizado
+</div>
+</div>
+<div>
+<h3 class="purple">Modelos</h3>
+<div style="font-size:12px; line-height:1.8;">
+• Regressão EF ~ ferritina + hematócrito + CTL (validar crossover #3)<br>
+• Predição de recovery com lab features incluídas<br>
+• Clustering de tipos de treino (intensidade × duração × recovery)<br>
+• Análise de séries temporais: lag entre intervenção e efeito
+</div>
+</div>
+<div>
+<h3 class="green">Carreira</h3>
+<div style="font-size:12px; line-height:1.8;">
+• Portfolio: este projeto demonstra pipeline completo + ML + domain expertise<br>
+• PMI-CPMAI: 80% dos conceitos já aplicados na prática<br>
+• Articulação: cada script mapeia 1:1 com conceitos do plano de estudos
+</div>
+</div>
+</div>
+</div>
+
+<h2>📦 Outliers & Data Quality Log</h2>
+<div class="card full">
+<table>
+<tr><th>Data</th><th>Tipo</th><th>Problema</th><th>Ação</th><th>Impacto</th></tr>
+<tr><td>21/dez/25</td><td>Sleep</td><td>Noite em claro sáb→dom, sono diurno 330min registrado como SLEEP às 09:05</td><td>Excluído do pipeline</td><td>Mínimo — cai no período "Restart", não afeta home office</td></tr>
+<tr><td>31/dez/25</td><td>Sleep</td><td>Sem registro de sono (NYE)</td><td>Gap natural — dia sem dados</td><td>Mínimo</td></tr>
+<tr><td>Power meter</td><td>Garmin</td><td>Readings bugados (picos irreais) em treinos antigos</td><td>Filtro de outliers no process_fit.py</td><td>Afetava curva de potência</td></tr>
+<tr><td>Numpy 2.x</td><td>Infra</td><td>DLL blocking pelo Windows Defender</td><td>Fixado em numpy==1.26.4</td><td>Bloqueava todo o pipeline</td></tr>
+</table>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: TENDÊNCIAS -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-trends" class="tab-content">
+
+<h2>📈 Resumo de Tendências</h2>
+
+<div class="grid">
+<div class="card">
+<h3 class="green">✅ Melhorando</h3>
+<table>
+<tr><td>Hematócrito</td><td>53.7% → <strong>46.6%</strong></td><td class="ok">Normalizado</td></tr>
+<tr><td>Hemoglobina</td><td>17.5 → <strong>15.6</strong></td><td class="ok">Normalizado</td></tr>
+<tr><td>Ferritina</td><td>9.5 → <strong>93.7</strong></td><td class="ok">Excelente</td></tr>
+<tr><td>Cortisol</td><td>8.49 → <strong>9.09</strong></td><td class="ok">Estabilizando</td></tr>
+<tr><td>SHBG</td><td>9.69 → <strong>31.28</strong></td><td class="ok">Normalizada</td></tr>
+<tr><td>TSB</td><td>-40 → <strong>+41</strong></td><td class="ok">Descansada</td></tr>
+<tr><td>Peso</td><td>77 → <strong>68kg</strong></td><td class="ok">-9kg (objetivo)</td></tr>
+<tr><td>W/kg</td><td>2.84 → <strong>3.22</strong></td><td class="ok">+13%</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h3 class="red">⚠️ Atenção</h3>
+<table>
+<tr><td>Sat. Transferrina</td><td><strong>57.3%</strong></td><td class="hi">Acima ref (15-50)</td></tr>
+<tr><td>HDL</td><td><strong>37</strong></td><td class="lo">Crônico &lt;40 (4 exames)</td></tr>
+<tr><td>Insulina</td><td><strong>1.91</strong></td><td class="lo">Abaixo ref (3 exames)</td></tr>
+<tr><td>Hemácias</td><td><strong>5.77</strong></td><td class="warn">Ainda acima (2 exames)</td></tr>
+<tr><td>RDW</td><td><strong>16.7%</strong></td><td class="warn">Anisocitose</td></tr>
+<tr><td>Vit A</td><td><strong>0.35</strong></td><td class="warn">Limite inferior</td></tr>
+<tr><td>Cálcio</td><td>9.7 → <strong>9.1</strong></td><td class="warn">Tendência queda</td></tr>
+<tr><td>Leucócitos</td><td><strong>Invertido</strong></td><td class="warn">Seg 35% / Linf 54%</td></tr>
+</table>
+</div>
+</div>
+
+<h2>🗓️ Timeline Integrada</h2>
+<div class="card full">
+<div class="timeline">
+<div class="tl-item tl-blue"><div class="tl-date">Out–Nov/25</div><div class="tl-title">Build-up | Hemax 3x/sem + Noripurum IV nov</div><div class="tl-detail">CTL 45→95. Recovery 58%. HRV 43ms. Oxa+gel ativos. Ferritina 9.5.</div></div>
+<div class="tl-item tl-purple"><div class="tl-date">06/Dez/25</div><div class="tl-title">Prova 300km — TSS 634</div><div class="tl-detail">TSB -59. Sem recovery real nos dias seguintes.</div></div>
+<div class="tl-item tl-yellow"><div class="tl-date">07–21/Dez</div><div class="tl-title">Pós-prova | Hemax 1x/sem + Noripurum IV dez + Mounjaro 15/12</div><div class="tl-detail">Segundo Noripurum IV. Déficit calórico começa. 77→73kg.</div></div>
+<div class="tl-item tl-red"><div class="tl-date">22/Dez–04/Jan</div><div class="tl-title">Home Office — carga disfarçada</div><div class="tl-detail">9.7 sessões/sem. Sono total 8.5h (bifásico, consist. 45%). Strain 104 (>build-up). Deep sleep 160min (melhor do dataset — via cochilos).</div></div>
+<div class="tl-item tl-red"><div class="tl-date">05/Jan — 🩸 Exame #1</div><div class="tl-title">Policitemia no pico + volta ao escritório</div><div class="tl-detail">Hct 53.7%. Cortisol 8.49. Crashes: 3%, 7%, 9%. RHR 73bpm.</div></div>
+<div class="tl-item tl-yellow"><div class="tl-date">20/Jan–05/Fev</div><div class="tl-title">Damage control — volume reduzido</div><div class="tl-detail">TSB recuperando → +41. Hemax quinzenal.</div></div>
+<div class="tl-item tl-green"><div class="tl-date">06/Fev — 🩸 Exame #2</div><div class="tl-title">Normalização</div><div class="tl-detail">Hct 46.6% ✓. Ferritina 93.7 ✓. Eixo hormonal restaurado ✓. Peso 68kg.</div></div>
+</div>
+</div>
+
+<h2>📋 Plano de Ação</h2>
+<div class="card full">
+<div class="grid-3">
+<div>
+<h3 class="red">🔴 Imediato</h3>
+<div class="note note-red">
+<strong>Sat. Transferrina 57%</strong><br>Discutir pausa Hemax oral. Ferritina 94 = estoque adequado. Próximo Noripurum IV esperar ferritina cair.<br><br>
+<strong>Recontrole mar/26:</strong> Hemograma + Ferritina + Sat. Transf + PTH
+</div>
+</div>
+<div>
+<h3 class="yellow">🟡 Monitorar</h3>
+<div class="note note-yellow">HDL &lt;40 crônico — investigar pós peso estável<br><br>Vit A 0.35 — suplementar lipossolúvel<br><br>Cálcio 9.7→9.1 — pedir PTH<br><br>B12 371 — não espaçar IM<br><br>Inversão leucocitária — recontrolar</div>
+</div>
+<div>
+<h3 class="green">🟢 Próximos Passos (dados)</h3>
+<div class="note note-green">Se RHR cair → policitemia era fator<br><br>Se EF melhorar → ferritina impactando<br><br>Se recovery &gt;50% estável → hormonal OK<br><br>HRV baseline deve subir se estresse reduzir</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- CHARTS & LOGIC -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<script>
+// ── Tab navigation ──
+function showTab(id) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  const btns = document.querySelectorAll('.tab-btn');
+  btns.forEach(b => { if(b.textContent.toLowerCase().includes(id) || b.onclick?.toString().includes("'"+id+"'")) b.classList.add('active'); });
+  if(typeof event !== 'undefined' && event?.target?.classList) event.target.classList.add('active');
+  // Trigger chart resize
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+}
+
+// ── Ride data (injected by analyze_ride.py) ──
+// RIDE_DATA_PLACEHOLDER
+
+// ── Chart defaults ──
+Chart.defaults.color = '#888';
+Chart.defaults.borderColor = '#222';
+Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+Chart.defaults.font.size = 11;
+const gridOpts = { color:'#1a1a1a' };
+const noLegend = { plugins:{ legend:{ display:false } } };
+
+// ── Lab data ──
+const labDates = ['Set/25','Nov/25','Jan/26','Fev/26'];
+const labDatesShort = ['S','N','J','F'];
+
+function labChart(id, data, refLow, refHigh, color, label) {
+  const ctx = document.getElementById(id);
+  if(!ctx) return;
+  new Chart(ctx, {
+    type:'line',
+    data:{
+      labels: labDates,
+      datasets:[
+        { data:data, borderColor:color, backgroundColor:color+'33', pointRadius:5, pointBackgroundColor:color, fill:false, tension:0.3, label:label },
+        { data:Array(4).fill(refHigh), borderColor:'#ef444466', borderDash:[4,4], pointRadius:0, fill:false, label:'Ref max' },
+        { data:Array(4).fill(refLow), borderColor:'#22c55e66', borderDash:[4,4], pointRadius:0, fill:false, label:'Ref min' },
+      ]
+    },
+    options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ grid:gridOpts }, x:{ grid:gridOpts } }, plugins:{ legend:{ display:false } } }
+  });
+}
+
+labChart('chartFerritin', [9.5, null, 26.1, 93.7], 10, 291, '#22c55e', 'Ferritina');
+labChart('chartHematocrit', [null, 49.8, 53.7, 46.6], 36, 48, '#3b82f6', 'Hematócrito');
+labChart('chartHDL', [null, 32, 39, 37], 40, 999, '#eab308', 'HDL');
+labChart('chartTestosterone', [22.6, 58.7, 28.8, 33.6], 8.38, 35.01, '#a855f7', 'Testosterona');
+
+// ── Recovery chart (mock monthly aggregates from data) ──
+const recMonths = ['Mar/25','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez','Jan/26','Fev'];
+const recData = [60, 58, 62, 55, 54, 56, 59, 58, 57, 52, 47, 52];
+const recColors = recData.map(v => v >= 67 ? '#22c55e' : v >= 34 ? '#eab308' : '#ef4444');
+new Chart(document.getElementById('chartRecovery'), {
+  type:'bar',
+  data:{ labels:recMonths, datasets:[{ data:recData, backgroundColor:recColors, borderRadius:4 }] },
+  options:{ responsive:true, maintainAspectRatio:false, ...noLegend,
+    scales:{ y:{ grid:gridOpts, suggestedMin:0, suggestedMax:100 }, x:{ grid:gridOpts } },
+    plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:ctx=>ctx.raw+'% recovery' } } }
+  }
+});
+
+// ── HRV + RHR chart ──
+const hrvMonths = recMonths;
+const hrvData = [44, 43, 45, 42, 40, 41, 43, 43, 42, 49, 41, 42];
+const rhrData = [61, 62, 60, 63, 64, 63, 62, 62, 63, 59, 64, 63];
+new Chart(document.getElementById('chartHRV'), {
+  type:'line',
+  data:{
+    labels:hrvMonths,
+    datasets:[
+      { data:hrvData, borderColor:'#3b82f6', backgroundColor:'#3b82f622', pointRadius:3, fill:true, tension:0.3, label:'HRV (ms)', yAxisID:'y' },
+      { data:rhrData, borderColor:'#ef4444', pointRadius:3, fill:false, tension:0.3, label:'RHR (bpm)', yAxisID:'y1' },
+    ]
+  },
+  options:{ responsive:true, maintainAspectRatio:false,
+    scales:{ y:{ grid:gridOpts, position:'left', title:{display:true,text:'HRV (ms)'} }, y1:{ grid:{display:false}, position:'right', title:{display:true,text:'RHR (bpm)'} }, x:{ grid:gridOpts } },
+  }
+});
+
+// ── Strain chart ──
+const strainData = [13.5, 14.2, 15.1, 14.8, 15.5, 14.9, 15.2, 14.8, 14.5, 15.8, 13.2, 11.5];
+new Chart(document.getElementById('chartStrain'), {
+  type:'bar',
+  data:{ labels:recMonths, datasets:[{ data:strainData, backgroundColor:'#f9731655', borderColor:'#f97316', borderWidth:1, borderRadius:3 }] },
+  options:{ responsive:true, maintainAspectRatio:false, ...noLegend, scales:{ y:{ grid:gridOpts }, x:{ grid:gridOpts } } }
+});
+
+// ── Feature importance ──
+const features = ['Tendência Recovery 7d','Carga Total 7d','Instabilidade RHR 7d','Carga Aguda (ATL)','Monotonia do Strain','Deep Sleep (min)','Strain Dia Anterior','HRV 7d Média','Horas de Sono','RHR Média 3d','Recovery Dia Anterior','Consistência Sono','Skin Temp','SpO₂ Variação','Sessões Não-Cycling'];
+const impValues = [0.048, 0.042, 0.038, 0.035, 0.033, 0.030, 0.028, 0.026, 0.024, 0.022, 0.020, 0.018, 0.016, 0.014, 0.012];
+new Chart(document.getElementById('chartFeatures'), {
+  type:'bar',
+  data:{ labels:features, datasets:[{ data:impValues, backgroundColor:'#3b82f644', borderColor:'#3b82f6', borderWidth:1, borderRadius:3 }] },
+  options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y', ...noLegend,
+    scales:{ x:{ grid:gridOpts, title:{display:true,text:'Importância'} }, y:{ grid:gridOpts } }
+  }
+});
+
+// ── Sleep chart (corrected with naps) ──
+const sleepH = [7.8, 7.6, 7.9, 7.5, 7.4, 7.6, 7.8, 7.7, 7.6, 8.5, 8.2, 7.7];
+const sleepNight = [7.5, 7.3, 7.5, 7.2, 7.0, 7.2, 7.5, 7.6, 7.4, 7.2, 7.6, 7.0];
+const deepMin = [131, 125, 130, 122, 118, 122, 128, 127, 124, 160, 167, 153];
+new Chart(document.getElementById('chartSleep'), {
+  type:'bar',
+  data:{
+    labels:recMonths,
+    datasets:[
+      { data:sleepNight, backgroundColor:'#3b82f644', borderColor:'#3b82f6', borderWidth:1, borderRadius:3, label:'Noturno (h)', yAxisID:'y', stack:'sleep' },
+      { data:sleepH.map((t,i)=>+(t-sleepNight[i]).toFixed(1)), backgroundColor:'#a855f744', borderColor:'#a855f7', borderWidth:1, borderRadius:3, label:'Cochilos (h)', yAxisID:'y', stack:'sleep' },
+      { data:deepMin, type:'line', borderColor:'#22c55e', pointRadius:3, fill:false, tension:0.3, label:'Deep Total (min)', yAxisID:'y1' },
+    ]
+  },
+  options:{ responsive:true, maintainAspectRatio:false,
+    scales:{ y:{ grid:gridOpts, position:'left', title:{display:true,text:'Horas'}, stacked:true }, y1:{ grid:{display:false}, position:'right', title:{display:true,text:'Deep (min)'} }, x:{ grid:gridOpts, stacked:true } },
+  }
+});
+
+// ── Nap hour distribution ──
+const napHours = [0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,8,16,26,12,4];
+const napHourLabels = Array.from({length:24}, (_,i) => `${i}h`);
+const napHourColors = napHours.map((_,i) => i>=19 && i<=23 ? '#a855f7' : i>=12 && i<=18 ? '#3b82f6' : '#333');
+new Chart(document.getElementById('chartNapHours'), {
+  type:'bar',
+  data:{ labels:napHourLabels, datasets:[{ data:napHours, backgroundColor:napHourColors, borderRadius:3 }] },
+  options:{ responsive:true, maintainAspectRatio:false, ...noLegend,
+    scales:{ y:{ grid:gridOpts, title:{display:true,text:'Qtd'} }, x:{ grid:gridOpts } },
+  }
+});
+
+// ── Deep sleep contribution (night vs nap) ──
+const periods = ['Build-up','Pós-evento','Home office','Crash','Damage ctrl','Atual'];
+const nightDeep = [124, 127, 129, 147, 136, 132];
+const napDeep = [3, 0, 31, 20, 9, 20];
+new Chart(document.getElementById('chartDeepContrib'), {
+  type:'bar',
+  data:{
+    labels:periods,
+    datasets:[
+      { data:nightDeep, backgroundColor:'#3b82f666', borderColor:'#3b82f6', borderWidth:1, label:'Deep Noturno (min)', borderRadius:3 },
+      { data:napDeep, backgroundColor:'#a855f766', borderColor:'#a855f7', borderWidth:1, label:'Deep Cochilos (min)', borderRadius:3 },
+    ]
+  },
+  options:{ responsive:true, maintainAspectRatio:false,
+    scales:{ y:{ grid:gridOpts, stacked:true, title:{display:true,text:'min'} }, x:{ grid:gridOpts, stacked:true } },
+  }
+});
+
+// ── PMC chart ──
+const pmcMonths = ['Mar/25','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez','Jan/26','Fev'];
+const ctlData = [45, 52, 60, 68, 85, 100, 110, 95, 98, 108, 105, 89];
+const tsbData = [10, 5, -5, -10, -20, -15, -8, 24, 1, -59, -9, 41];
+new Chart(document.getElementById('chartPMC'), {
+  type:'line',
+  data:{
+    labels:pmcMonths,
+    datasets:[
+      { data:ctlData, borderColor:'#3b82f6', backgroundColor:'#3b82f622', pointRadius:3, fill:true, tension:0.3, label:'CTL (Fitness)' },
+      { data:tsbData, borderColor:'#22c55e', backgroundColor:'#22c55e22', pointRadius:3, fill:true, tension:0.3, label:'TSB (Form)' },
+    ]
+  },
+  options:{ responsive:true, maintainAspectRatio:false,
+    scales:{ y:{ grid:gridOpts }, x:{ grid:gridOpts } },
+    plugins:{ annotation:{ annotations:{
+      line1:{ type:'line', yMin:0, yMax:0, borderColor:'#888', borderDash:[3,3] }
+    }}}
+  }
+});
+
+// ── Auth ──
+const AUTH_KEY = 'apgia_auth_hash';
+const AUTH_SESSION = 'apgia_session';
+
+async function sha256(msg) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function authCheck() {
+  const pass = document.getElementById('auth-pass').value;
+  if (!pass) return;
+  const hash = await sha256(pass);
+  const stored = localStorage.getItem(AUTH_KEY);
+  if (!stored) {
+    // First time — set password
+    localStorage.setItem(AUTH_KEY, hash);
+    authSuccess();
+  } else if (hash === stored) {
+    authSuccess();
+  } else {
+    document.getElementById('auth-error').style.display = 'block';
+    document.getElementById('auth-pass').value = '';
+  }
+}
+
+function authSuccess() {
+  sessionStorage.setItem(AUTH_SESSION, '1');
+  document.getElementById('auth-overlay').style.display = 'none';
+  document.getElementById('main-content-tabs').style.display = 'flex';
+  showTab('profile');
+}
+
+// Check existing session
+if (sessionStorage.getItem(AUTH_SESSION)) {
+  authSuccess();
+} else {
+  const stored = localStorage.getItem(AUTH_KEY);
+  document.getElementById('auth-setup').textContent = stored ? '' : 'Primeira vez? A senha que digitar será sua senha.';
+}
+
+// ── APGIA Sub-tabs ──
+function showApgiaSub(id) {
+  document.querySelectorAll('.apgia-sub').forEach(el => el.style.display = 'none');
+  document.getElementById('apgia-' + (id === 'lab-input' ? 'lab-input' : id)).style.display = 'block';
+  document.querySelectorAll('#apgia-subtabs button').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+// ── FTP config ──
+const FTP = 219;
+const WEIGHT = 68;
+
+// ── localStorage helpers ──
+function getRides() { try { return JSON.parse(localStorage.getItem('apgia_rides') || '[]'); } catch { return []; } }
+function saveRide(r) { const rides = getRides(); rides.unshift(r); localStorage.setItem('apgia_rides', JSON.stringify(rides.slice(0, 100))); }
+function getLabs() { try { return JSON.parse(localStorage.getItem('apgia_labs') || '[]'); } catch { return []; } }
+
+// ── Temporal lab matching (±60 days) ──
+function findLabForDate(dateStr) {
+  const labs = getLabs();
+  if (!labs.length) return null;
+  const d = new Date(dateStr).getTime();
+  let best = null, bestDist = Infinity;
+  for (const lab of labs) {
+    const ld = new Date(lab.date).getTime();
+    const dist = Math.abs(d - ld);
+    if (dist < 60 * 86400000 && dist < bestDist) { best = lab; bestDist = dist; }
+  }
+  return best;
+}
+
+// ── Ride analysis engine ──
+function analyzeRide(ride) {
+  const r = {...ride};
+  // Calc derived
+  if (!r.normalized_power) r.normalized_power = r.avg_power;
+  r.intensity_factor = r.normalized_power / FTP;
+  if (!r.tss || r.tss === 0) {
+    r.tss = Math.round((r.duration_min * 60 * r.normalized_power * r.intensity_factor) / (FTP * 3600) * 100);
+  }
+  r.variability_index = r.normalized_power / (r.avg_power || 1);
+  r.ef = r.avg_hr > 0 ? r.normalized_power / r.avg_hr : 0;
+  r.wkg = r.avg_power / WEIGHT;
+  r.np_wkg = r.normalized_power / WEIGHT;
+  
+  // Zone
+  const if_val = r.intensity_factor;
+  r.zone = if_val < 0.55 ? 'Z1 — Recuperação' : if_val < 0.75 ? 'Z2 — Endurance' : if_val < 0.90 ? 'Z3 — Tempo' : if_val < 1.05 ? 'Z4 — Limiar' : if_val < 1.20 ? 'Z5 — VO₂max' : 'Z6 — Anaeróbico';
+  
+  // Impact
+  const impact = {};
+  if (r.tss < 50) { impact.tss_level='Leve'; impact.drop=-5; impact.days=0; }
+  else if (r.tss < 100) { impact.tss_level='Moderado'; impact.drop=-10; impact.days=1; }
+  else if (r.tss < 200) { impact.tss_level='Forte'; impact.drop=-20; impact.days=1; }
+  else if (r.tss < 350) { impact.tss_level='Muito forte'; impact.drop=-30; impact.days=2; }
+  else { impact.tss_level='Extremo'; impact.drop=-40; impact.days=3; }
+  
+  // Suggestions
+  const suggestions = [];
+  if (r.tss > 200) suggestions.push({p:'high', a:'Rest day amanhã', r:`TSS ${r.tss} = fadiga significativa`});
+  else if (r.tss > 100) suggestions.push({p:'medium', a:'Z1-Z2 curto amanhã (30-45min)', r:'Recovery ativo'});
+  else suggestions.push({p:'low', a:'Treino normal amanhã', r:'Carga leve'});
+  
+  if (r.rpe >= 8 && r.intensity_factor < 0.75) suggestions.push({p:'high', a:'RPE alto com potência baixa', r:'Pode indicar fadiga, desidratação ou sono insuficiente'});
+  if (r.ef > 0 && r.ef < 1.3) suggestions.push({p:'medium', a:`EF baixo (${r.ef.toFixed(2)})`, r:'FC alta pra potência — fadiga, calor, ou desidratação'});
+  if (r.ef > 1.8) suggestions.push({p:'info', a:`EF excelente (${r.ef.toFixed(2)})`, r:'Boa eficiência cardiovascular'});
+  
+  // Lab context
+  const lab = findLabForDate(r.date);
+  
+  r.impact = impact;
+  r.suggestions = suggestions;
+  r.lab = lab;
+  
+  return r;
+}
+
+// ── Display analysis ──
+function displayAnalysis(r) {
+  document.getElementById('ride-empty').style.display = 'none';
+  document.getElementById('ride-content').style.display = 'block';
+  document.getElementById('ride-title').textContent = `🔄 ${r.date} — ${r.duration_min?.toFixed(0)}min ${r.zone || ''}`;
+  
+  // KPIs
+  const kpis = document.getElementById('ride-kpis');
+  kpis.innerHTML = [
+    {v:`${r.avg_power?.toFixed(0)}W`, l:'Potência Média', s:`NP ${r.normalized_power?.toFixed(0)}W`},
+    {v:`${r.tss?.toFixed(0)}`, l:'TSS', s:r.impact?.tss_level||''},
+    {v:`${r.intensity_factor?.toFixed(2)}`, l:'IF', s:r.zone||''},
+    {v:`${r.wkg?.toFixed(2)}`, l:'W/kg', s:`NP ${r.np_wkg?.toFixed(2)}`},
+    {v:`${r.rpe}/10`, l:'RPE', s:r.feel||''},
+  ].map(k=>`<div class="kpi"><div class="kpi-val">${k.v}</div><div class="kpi-label">${k.l}</div><div class="kpi-sub">${k.s}</div></div>`).join('');
+  
+  // Metrics
+  document.getElementById('ride-metrics').innerHTML = [
+    ['Duração',`${r.duration_min?.toFixed(0)} min`],['Distância',`${(r.distance_km||0).toFixed(1)} km`],
+    ['Elevação',`${(r.elevation_m||0).toFixed(0)} m`],['IF',r.intensity_factor?.toFixed(2)],
+    ['VI',r.variability_index?.toFixed(2)],['EF',r.ef>0?r.ef.toFixed(2):'—'],
+    ['FC',r.avg_hr>0?`${r.avg_hr?.toFixed(0)}/${r.max_hr?.toFixed(0)} bpm`:'—'],
+  ].map(([k,v])=>`<tr><td>${k}</td><td><strong>${v}</strong></td></tr>`).join('');
+  
+  // State
+  const stEl = document.getElementById('ride-state');
+  const stRows = [];
+  if(r.pre_recovery) stRows.push(['Recovery',`${r.pre_recovery}%`]);
+  if(r.pre_hrv) stRows.push(['HRV',`${r.pre_hrv} ms`]);
+  stEl.innerHTML = stRows.length ? stRows.map(([k,v])=>`<tr><td>${k}</td><td><strong>${v}</strong></td></tr>`).join('') : '<tr><td class="dim">Sem dados pré-treino</td></tr>';
+  
+  // Impact
+  const imp = r.impact || {};
+  document.getElementById('ride-impact').innerHTML = `
+    <div class="kpi-row">
+      <div class="kpi"><div class="kpi-val">${imp.tss_level||'—'}</div><div class="kpi-label">Nível</div></div>
+      <div class="kpi"><div class="kpi-val ${imp.drop<-20?'red':'yellow'}">${imp.drop||0}%</div><div class="kpi-label">Recovery drop</div></div>
+      <div class="kpi"><div class="kpi-val">${imp.days||0}d</div><div class="kpi-label">Absorção</div></div>
+    </div>`;
+  
+  // Suggestions
+  const icons = {high:'🔴',medium:'🟡',low:'🟢',info:'ℹ️'};
+  document.getElementById('ride-suggestions').innerHTML = (r.suggestions||[]).map(s=>
+    `<div class="note note-${s.p==='high'?'red':s.p==='medium'?'yellow':'blue'}" style="margin:6px 0;"><strong>${icons[s.p]||'•'} ${s.a}</strong><br><span class="dim">${s.r}</span></div>`
+  ).join('');
+  
+  // Lab context (temporal matching)
+  const labEl = document.getElementById('ride-lab');
+  const labCard = document.getElementById('ride-lab-card');
+  if (r.lab) {
+    labCard.style.display = 'block';
+    const daysDiff = Math.round(Math.abs(new Date(r.date) - new Date(r.lab.date)) / 86400000);
+    const statusIcon = v => v > 0 ? '⚠️' : v < 0 ? '🔻' : '✅';
+    let html = `<div class="dim" style="margin-bottom:8px;">Exame de ${r.lab.date} (${daysDiff} dias ${new Date(r.lab.date)<new Date(r.date)?'antes':'depois'} do treino)</div>`;
+    const markers = r.lab.markers || {};
+    const refs = {hct:[36,48],hb:[12,16],ferr:[13,150],sattr:[15,50],cort:[5,25],ins:[3,25],glic:[70,100],hdl:[40,999]};
+    for (const [key, val] of Object.entries(markers)) {
+      if (val === null || val === undefined || val === '') continue;
+      const ref = refs[key];
+      const st = ref ? (val > ref[1] ? 1 : val < ref[0] ? -1 : 0) : 0;
+      const cls = st > 0 ? 'tag-red' : st < 0 ? 'tag-yellow' : 'tag-green';
+      const names = {hct:'Hct',hb:'Hb',ferr:'Ferritina',sattr:'Sat.Transf',cort:'Cortisol',ins:'Insulina',glic:'Glicose',hdl:'HDL',tst:'TST',vitd:'Vit D',b12:'B12',ca:'Cálcio',a1c:'HbA1c',rdw:'RDW',hemacias:'Hemácias'};
+      html += `<span class="tag ${cls}">${statusIcon(st)} ${names[key]||key}: ${val}</span> `;
+    }
+    labEl.innerHTML = html;
+  } else {
+    labCard.style.display = 'none';
+  }
+  
+  showApgiaSub('analysis');
+}
+
+// ── Manual ride submit ──
+function submitManualRide() {
+  const v = id => { const el = document.getElementById(id); return el ? (el.value || '') : ''; };
+  const n = id => { const val = v(id); return val ? parseFloat(val) : 0; };
+  
+  const ride = {
+    date: v('m-date') || new Date().toISOString().slice(0,10),
+    type: v('m-type'),
+    duration_min: n('m-dur'),
+    distance_km: n('m-dist'),
+    elevation_m: n('m-elev'),
+    avg_power: n('m-avgw'),
+    normalized_power: n('m-np') || n('m-avgw'),
+    tss: n('m-tss'),
+    avg_hr: n('m-avghr'),
+    max_hr: n('m-maxhr'),
+    avg_cadence: n('m-cad'),
+    rpe: parseInt(v('m-rpe')) || 5,
+    feel: v('m-feel'),
+    notes: v('m-notes'),
+    pre_recovery: n('m-rec') || null,
+    pre_hrv: n('m-hrv') || null,
+    source: 'manual',
+  };
+  
+  if (!ride.duration_min || !ride.avg_power) { alert('Preencha pelo menos duração e potência média.'); return; }
+  
+  const analyzed = analyzeRide(ride);
+  saveRide(analyzed);
+  displayAnalysis(analyzed);
+  renderHistory();
+}
+
+// ── FIT file parser (minimal — session extraction) ──
+function handleFitUpload(file) {
+  if (!file) return;
+  const status = document.getElementById('fit-status');
+  status.innerHTML = '<span class="dim">Processando...</span>';
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new DataView(e.target.result);
+      const ride = parseFitSession(data, file.name);
+      if (ride) {
+        status.innerHTML = `<span class="green">✅ ${ride.duration_min.toFixed(0)}min | ${ride.avg_power.toFixed(0)}W | ${ride.distance_km.toFixed(1)}km</span>`;
+        const analyzed = analyzeRide(ride);
+        saveRide(analyzed);
+        displayAnalysis(analyzed);
+        renderHistory();
+      } else {
+        status.innerHTML = '<span class="red">⚠️ Sem dados de session no .fit. Use input manual.</span>';
+      }
+    } catch(err) {
+      status.innerHTML = `<span class="red">⚠️ Erro ao ler .fit: ${err.message}. Use input manual.</span>`;
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseFitSession(dv, fname) {
+  const len = dv.byteLength;
+  // Header: 14 bytes (or 12 for old)
+  const hdrSize = dv.getUint8(0);
+  let offset = hdrSize;
+  
+  const defs = {}; // local_msg_type → {global_msg_num, fields:[{num,size,base}], arch}
+  let session = null;
+  
+  while (offset < len - 2) {
+    const recHdr = dv.getUint8(offset); offset++;
+    
+    if (recHdr & 0x80) {
+      // Compressed timestamp — skip data
+      const localType = (recHdr >> 5) & 0x3;
+      const def = defs[localType];
+      if (def) { for (const f of def.fields) offset += f.size; }
+      continue;
+    }
+    
+    const isDef = (recHdr & 0x40) !== 0;
+    const localType = recHdr & 0x0F;
+    
+    if (isDef) {
+      offset++; // reserved
+      const arch = dv.getUint8(offset); offset++; // 0=LE, 1=BE
+      const globalNum = arch ? dv.getUint16(offset, false) : dv.getUint16(offset, true); offset += 2;
+      const numFields = dv.getUint8(offset); offset++;
+      const fields = [];
+      for (let i = 0; i < numFields; i++) {
+        fields.push({ num: dv.getUint8(offset), size: dv.getUint8(offset+1), base: dv.getUint8(offset+2) });
+        offset += 3;
+      }
+      // Dev fields (FIT 2.0)
+      if (recHdr & 0x20) {
+        const numDev = dv.getUint8(offset); offset++;
+        for (let i = 0; i < numDev; i++) offset += 3;
+      }
+      defs[localType] = { global: globalNum, fields, arch };
+    } else {
+      // Data record
+      const def = defs[localType];
+      if (!def) { break; } // corrupted
+      
+      const values = {};
+      const le = !def.arch;
+      for (const f of def.fields) {
+        if (offset + f.size > len) break;
+        let val;
+        const bt = f.base & 0x7F;
+        if (f.size === 1) { val = dv.getUint8(offset); if(val===0xFF)val=null; }
+        else if (f.size === 2) { val = dv.getUint16(offset, le); if(val===0xFFFF)val=null; }
+        else if (f.size === 4) { 
+          if (bt === 8 || bt === 136) { val = dv.getFloat32(offset, le); }
+          else { val = dv.getUint32(offset, le); if(val===0xFFFFFFFF)val=null; }
+        }
+        else { val = null; } // skip strings/arrays
+        if (val !== null) values[f.num] = val;
+        offset += f.size;
+      }
+      
+      // Session message = global 18
+      if (def.global === 18) {
+        session = values;
+      }
+    }
+  }
+  
+  if (!session) return null;
+  
+  // Garmin epoch: 1989-12-31 00:00:00 UTC
+  const garminEpoch = 631065600; // seconds from Unix epoch to Garmin epoch
+  const ts = session[253]; // timestamp
+  const startTs = session[2] || ts; // start_time
+  const dateObj = startTs ? new Date((startTs + garminEpoch) * 1000) : new Date();
+  
+  return {
+    date: dateObj.toISOString().slice(0, 10),
+    type: 'road',
+    duration_min: (session[8] || session[7] || 0) / 1000 / 60, // total_timer_time in ms
+    distance_km: (session[9] || 0) / 100000, // total_distance in cm
+    elevation_m: session[22] || 0, // total_ascent
+    avg_power: session[20] || 0,
+    normalized_power: session[34] || session[20] || 0,
+    avg_hr: session[16] || 0,
+    max_hr: session[17] || 0,
+    avg_cadence: session[18] || 0,
+    tss: session[35] ? session[35] / 10 : 0,
+    rpe: 5,
+    feel: 'ok',
+    notes: `Importado de ${fname}`,
+    pre_recovery: null,
+    pre_hrv: null,
+    source: 'fit',
+  };
+}
+
+// ── Drag & drop ──
+['fit-drop','whoop-drop'].forEach(id => {
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
+  el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+  el.addEventListener('drop', e => {
+    e.preventDefault(); el.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (id === 'fit-drop' && f) handleFitUpload(f);
+    if (id === 'whoop-drop' && f) handleWhoopCSV(f);
+  });
+});
+
+// ── Whoop CSV handler ──
+function handleWhoopCSV(file) {
+  if (!file) return;
+  const status = document.getElementById('whoop-status');
+  Papa.parse(file, {
+    header: true,
+    complete: function(results) {
+      const rows = results.data.filter(r => Object.values(r).some(v=>v));
+      const type = file.name.toLowerCase().includes('sleep') ? 'sleeps' : 
+                   file.name.toLowerCase().includes('physio') ? 'physio' :
+                   file.name.toLowerCase().includes('workout') ? 'workouts' : 'unknown';
+      localStorage.setItem(`apgia_whoop_${type}`, JSON.stringify(rows.slice(0, 500)));
+      status.innerHTML = `<span class="green">✅ ${file.name}: ${rows.length} registros importados (${type})</span>`;
+    },
+    error: function(err) { status.innerHTML = `<span class="red">⚠️ Erro: ${err.message}</span>`; }
+  });
+}
+
+// ── Lab submit ──
+function submitLab() {
+  const v = id => { const el = document.getElementById(id); const val = el?.value; return val ? parseFloat(val) : null; };
+  const date = document.getElementById('lab-date')?.value;
+  if (!date) { alert('Preencha a data do exame.'); return; }
+  
+  const lab = {
+    date,
+    markers: {
+      hemacias: v('lab-hemacias'), hb: v('lab-hb'), hct: v('lab-hct'),
+      ferr: v('lab-ferr'), sattr: v('lab-sattr'), rdw: v('lab-rdw'),
+      glic: v('lab-glic'), a1c: v('lab-a1c'), ins: v('lab-ins'),
+      cort: v('lab-cort'), tst: v('lab-tst'), vitd: v('lab-vitd'),
+      b12: v('lab-b12'), hdl: v('lab-hdl'), ca: v('lab-ca'),
+    }
+  };
+  
+  // Remove nulls
+  for (const k of Object.keys(lab.markers)) { if (lab.markers[k] === null) delete lab.markers[k]; }
+  
+  const labs = getLabs();
+  labs.push(lab);
+  labs.sort((a,b) => a.date.localeCompare(b.date));
+  localStorage.setItem('apgia_labs', JSON.stringify(labs));
+  
+  document.getElementById('lab-status').innerHTML = `<span class="green">✅ Exame ${date} salvo (${Object.keys(lab.markers).length} marcadores)</span>`;
+  renderLabHistory();
+}
+
+// ── History rendering ──
+function renderHistory() {
+  const rides = getRides();
+  const el = document.getElementById('ride-history-list');
+  if (!rides.length) { el.innerHTML = '<div class="dim">Nenhum treino registrado.</div>'; return; }
+  el.innerHTML = rides.map((r,i) => `
+    <div class="ride-history-item" onclick="displayAnalysis(getRides()[${i}])">
+      <strong>${r.date}</strong> · ${r.duration_min?.toFixed(0)}min · ${r.avg_power?.toFixed(0)}W · TSS ${r.tss?.toFixed(0)} · IF ${r.intensity_factor?.toFixed(2)}
+      <span class="dim" style="float:right;">${r.source||'manual'}</span>
+    </div>
+  `).join('');
+}
+
+function renderLabHistory() {
+  const labs = getLabs();
+  const el = document.getElementById('lab-history-list');
+  if (!labs.length) { el.innerHTML = '<div class="dim">Nenhum exame registrado.</div>'; return; }
+  el.innerHTML = labs.map(l => {
+    const markers = Object.entries(l.markers||{}).map(([k,v])=>`${k}:${v}`).join(', ');
+    return `<div class="ride-history-item"><strong>${l.date}</strong> · ${Object.keys(l.markers||{}).length} marcadores<br><span class="dim" style="font-size:11px;">${markers}</span></div>`;
+  }).join('');
+}
+
+function exportRideHistory() {
+  const data = JSON.stringify(getRides(), null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `apgia_rides_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+}
+
+// ── Init ──
+document.getElementById('m-date').value = new Date().toISOString().slice(0,10);
+renderHistory();
+renderLabHistory();
+
+// ── Load injected data (from Python pipeline) ──
+if (window.RIDE_DATA) {
+  const R = window.RIDE_DATA;
+  displayAnalysis({...R.ride, impact: R.impact, suggestions: R.suggestions?.map(s=>({p:s.priority,a:s.action,r:s.reason})), lab: null});
+}
+
+// ── Crossover: Hematocrit vs RHR timeline ──
+const crossMonths = ['Set/25','Out','Nov','Dez','Jan/26','Fev'];
+const hctVals = [null, null, 49.8, null, 53.7, 46.6];
+const rhrCross = [62, 62, 63, 59, 64, 63];
+new Chart(document.getElementById('chartCrossHct'), {
+  type:'line',
+  data:{
+    labels:crossMonths,
+    datasets:[
+      { data:hctVals, borderColor:'#ef4444', backgroundColor:'#ef444422', pointRadius:6, pointBackgroundColor:'#ef4444', fill:false, tension:0.3, label:'Hematócrito (%)', yAxisID:'y', spanGaps:true },
+      { data:rhrCross, borderColor:'#3b82f6', pointRadius:4, fill:false, tension:0.3, label:'RHR (bpm)', yAxisID:'y1' },
+    ]
+  },
+  options:{ responsive:true, maintainAspectRatio:false,
+    scales:{ y:{ grid:gridOpts, position:'left', title:{display:true,text:'Hct %'}, min:40, max:56 }, y1:{ grid:{display:false}, position:'right', title:{display:true,text:'RHR bpm'}, min:55, max:70 }, x:{ grid:gridOpts } },
+  }
+});
+</script>
+
+<div style="text-align:center; padding:20px; color:#333; font-size:10px;">
+  APGIA · Health & Performance Dashboard · Dados: Garmin (2022–26), Whoop (fev/25–fev/26), Lab (set/25–fev/26)<br>
+  Não substitui avaliação médica · Bypass Roux-en-Y 2013
+</div>
+
+</body>
+</html>

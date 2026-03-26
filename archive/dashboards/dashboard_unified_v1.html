@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Health & Performance Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:        #0a0a0a;
+  --card:      #141414;
+  --card-alt:  #1a1a1a;
+  --border:    #222;
+  --border-lt: #333;
+  --text:      #e0e0e0;
+  --text-dim:  #888;
+  --text-xdim: #555;
+  --red:       #ef4444;
+  --orange:    #f97316;
+  --yellow:    #eab308;
+  --green:     #22c55e;
+  --blue:      #3b82f6;
+  --purple:    #a855f7;
+  --cyan:      #06b6d4;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,-apple-system,sans-serif; font-size:13px; line-height:1.6; }
+
+/* ── Tabs ── */
+.tab-bar { display:flex; gap:0; background:#111; border-bottom:2px solid var(--border); position:sticky; top:0; z-index:100; overflow-x:auto; }
+.tab-btn { padding:12px 20px; background:transparent; border:none; color:var(--text-dim); font-size:13px; font-weight:600; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap; transition:all 0.2s; }
+.tab-btn:hover { color:var(--text); background:#1a1a1a; }
+.tab-btn.active { color:var(--blue); border-bottom-color:var(--blue); background:#0a0a1a; }
+.tab-content { display:none; padding:20px; max-width:1300px; margin:0 auto; }
+.tab-content.active { display:block; }
+
+/* ── Layout ── */
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+.grid-4 { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; }
+.full { grid-column:1/-1; }
+@media(max-width:900px) { .grid,.grid-3,.grid-4 { grid-template-columns:1fr; } }
+
+.card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:12px; }
+h2 { font-size:16px; margin:24px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+h2:first-child { margin-top:0; }
+h3 { font-size:13px; margin:0 0 8px; font-weight:700; }
+h4 { font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin:10px 0 6px; }
+
+/* ── KPI ── */
+.kpi-row { display:flex; gap:10px; flex-wrap:wrap; margin:8px 0; }
+.kpi { background:var(--card-alt); border:1px solid var(--border); border-radius:6px; padding:10px 14px; flex:1; min-width:100px; }
+.kpi-val { font-size:22px; font-weight:700; line-height:1.2; }
+.kpi-label { font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.3px; }
+.kpi-sub { font-size:10px; color:var(--text-xdim); }
+.kpi-delta { font-size:10px; margin-top:2px; }
+
+/* ── Colors ── */
+.red { color:var(--red); } .orange { color:var(--orange); } .yellow { color:var(--yellow); }
+.green { color:var(--green); } .blue { color:var(--blue); } .purple { color:var(--purple); } .cyan { color:var(--cyan); }
+.dim { color:var(--text-dim); } .xdim { color:var(--text-xdim); }
+
+/* ── Tags & Pills ── */
+.tag { display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:600; margin:1px; }
+.tag-red { background:#3a1111; color:var(--red); }
+.tag-yellow { background:#3a3011; color:var(--yellow); }
+.tag-green { background:#113a11; color:var(--green); }
+.tag-blue { background:#111133; color:var(--blue); }
+.tag-purple { background:#1a0a2a; color:var(--purple); }
+
+/* ── Findings ── */
+.note { padding:10px 12px; border-radius:6px; margin:8px 0; font-size:12px; line-height:1.7; }
+.note-red { background:#1a0a0a; border:1px solid #3a1111; }
+.note-yellow { background:#1a1700; border:1px solid #3a3011; }
+.note-green { background:#0a1a0a; border:1px solid #113a11; }
+.note-blue { background:#0a0a1a; border:1px solid #11113a; }
+.note-purple { background:#0f0a1a; border:1px solid #1a113a; }
+
+/* ── Tables ── */
+table { width:100%; border-collapse:collapse; font-size:12px; margin:6px 0; }
+th { text-align:left; padding:5px 8px; border-bottom:2px solid var(--border-lt); color:var(--text-dim); font-weight:600; font-size:11px; }
+td { padding:5px 8px; border-bottom:1px solid #1a1a1a; }
+tr:hover { background:#1a1a1a; }
+td.hi { color:var(--red); font-weight:600; }
+td.lo { color:var(--orange); font-weight:600; }
+td.ok { color:var(--green); }
+td.warn { color:var(--yellow); }
+
+/* ── Timeline ── */
+.timeline { position:relative; padding-left:18px; border-left:2px solid var(--border-lt); margin:12px 0 12px 8px; }
+.tl-item { position:relative; padding:6px 0 14px 14px; }
+.tl-item::before { content:''; position:absolute; left:-24px; top:10px; width:10px; height:10px; border-radius:50%; border:2px solid; }
+.tl-red::before { border-color:var(--red); background:#3a1111; }
+.tl-yellow::before { border-color:var(--yellow); background:#3a3011; }
+.tl-green::before { border-color:var(--green); background:#113a11; }
+.tl-blue::before { border-color:var(--blue); background:#11113a; }
+.tl-purple::before { border-color:var(--purple); background:#1a0a2a; }
+.tl-date { font-size:10px; color:var(--text-dim); font-weight:600; }
+.tl-title { font-size:12px; font-weight:600; margin:1px 0; }
+.tl-detail { font-size:11px; color:#aaa; line-height:1.6; }
+
+/* ── Charts ── */
+.chart-box { position:relative; height:200px; margin:6px 0; }
+.chart-box-lg { position:relative; height:280px; margin:6px 0; }
+
+/* ── Profile specific ── */
+.profile-header { display:flex; gap:20px; align-items:flex-start; }
+.profile-avatar { width:80px; height:80px; border-radius:50%; background:linear-gradient(135deg,var(--blue),var(--purple)); display:flex; align-items:center; justify-content:center; font-size:32px; flex-shrink:0; }
+.profile-info { flex:1; }
+.profile-name { font-size:20px; font-weight:700; margin-bottom:2px; }
+.profile-meta { font-size:12px; color:var(--text-dim); line-height:1.8; }
+.profile-badges { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+
+/* ── Status bar ── */
+.status-bar { display:flex; gap:4px; height:6px; border-radius:3px; overflow:hidden; margin:4px 0; }
+.status-bar div { flex:1; border-radius:2px; }
+
+.sep { border:0; border-top:1px solid var(--border); margin:12px 0; }
+</style>
+</head>
+<body>
+
+<!-- ═══════ TAB BAR ═══════ -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="showTab('profile')">👤 Perfil</button>
+  <button class="tab-btn" onclick="showTab('performance')">🚴 Performance</button>
+  <button class="tab-btn" onclick="showTab('recovery')">🔋 Recuperação</button>
+  <button class="tab-btn" onclick="showTab('sleep')">🌙 Sono</button>
+  <button class="tab-btn" onclick="showTab('health')">🩸 Exames</button>
+  <button class="tab-btn" onclick="showTab('trends')">📈 Tendências</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: PERFIL -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-profile" class="tab-content active">
+
+<div class="card full">
+<div class="profile-header">
+  <div class="profile-avatar">🚴</div>
+  <div class="profile-info">
+    <div class="profile-name">Anna Graboski</div>
+    <div class="profile-meta">
+      Nascimento: 14/04/1989 (36 anos) · Feminino<br>
+      Ciclista endurance · Bypass gástrico Roux-en-Y (2013, 13 anos)<br>
+      Rio de Janeiro, RJ
+    </div>
+    <div class="profile-badges">
+      <span class="tag tag-blue">FTP ~219W</span>
+      <span class="tag tag-green">Peso 68kg</span>
+      <span class="tag tag-purple">W/kg 3.22</span>
+      <span class="tag tag-yellow">CTL 89 ↓</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="grid">
+<!-- Dados Físicos -->
+<div class="card">
+<h3>📐 Dados Físicos & Composição</h3>
+<table>
+<tr><td>Peso atual</td><td><strong>68 kg</strong> <span class="dim">(era 77kg em dez/25)</span></td></tr>
+<tr><td>FTP estimado</td><td><strong>~219W</strong> <span class="dim">(melhor 20min: 231W em 24/dez)</span></td></tr>
+<tr><td>W/kg no FTP</td><td><strong>3.22</strong> <span class="dim">(era 2.84 a 77kg)</span></td></tr>
+<tr><td>HRmax registrada</td><td><strong>~192 bpm</strong></td></tr>
+<tr><td>Perda de peso</td><td><strong>-9 kg</strong> em 8 semanas <span class="dim">(Mounjaro)</span></td></tr>
+</table>
+</div>
+
+<!-- Histórico Médico -->
+<div class="card">
+<h3>⚕️ Histórico Médico</h3>
+<table>
+<tr><td>Bypass gástrico</td><td><strong>Roux-en-Y (2013)</strong></td></tr>
+<tr><td colspan="2" class="dim" style="font-size:11px;">Absorção permanentemente alterada: ferro oral ≈0, B12 reduzida, lipossolúveis (A,D,E,K) reduzidas, cálcio reduzido</td></tr>
+<tr><td>Consequências ativas</td><td>Ferro só entra via IV (Noripurum). Recovery estruturalmente limitada.</td></tr>
+</table>
+</div>
+
+<!-- Medicações -->
+<div class="card">
+<h3>💊 Medicações & Suplementação</h3>
+<table>
+<tr><th>Substância</th><th>Via</th><th>Regime</th><th>Desde</th></tr>
+<tr><td>Mounjaro 2.5mg</td><td>SC</td><td>1x/semana</td><td>15/12/25</td></tr>
+<tr><td>Noripurum (ferro)</td><td>IV</td><td>1x/mês (nov+dez)</td><td>Nov/25</td></tr>
+<tr><td>Hemax Eritron</td><td>Oral</td><td>3x→1x→quinzenal</td><td>Out/25</td></tr>
+<tr><td>Oxandrolona 5mg</td><td>Oral</td><td>Variável</td><td>—</td></tr>
+<tr><td>Suplementos gerais</td><td>Oral/IM</td><td>B12, D, Zn, etc.</td><td>Contínuo</td></tr>
+</table>
+<div class="note note-purple" style="margin-top:8px;">
+Ferro oral (Hemax) tem absorção negligenciável pós-bypass. Reposição efetiva é Noripurum IV.
+</div>
+</div>
+
+<!-- Indicadores Recentes -->
+<div class="card">
+<h3>📊 Indicadores Recentes <span class="dim">(fev/26)</span></h3>
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val green">46.6%</div><div class="kpi-label">Hematócrito</div><div class="kpi-delta green">↓ era 53.7%</div></div>
+<div class="kpi"><div class="kpi-val green">93.7</div><div class="kpi-label">Ferritina</div><div class="kpi-delta green">↑ era 26.1</div></div>
+<div class="kpi"><div class="kpi-val red">57.3%</div><div class="kpi-label">Sat. Transferrina</div><div class="kpi-delta red">↑ acima ref</div></div>
+<div class="kpi"><div class="kpi-val orange">37</div><div class="kpi-label">HDL</div><div class="kpi-delta orange">↓ crônico &lt;40</div></div>
+</div>
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val blue">42ms</div><div class="kpi-label">HRV Baseline</div><div class="kpi-sub">Whoop média</div></div>
+<div class="kpi"><div class="kpi-val blue">62bpm</div><div class="kpi-label">RHR Baseline</div><div class="kpi-sub">Whoop média</div></div>
+<div class="kpi"><div class="kpi-val yellow">57%</div><div class="kpi-label">Recovery Médio</div><div class="kpi-sub">16% RED / 36% GREEN</div></div>
+<div class="kpi"><div class="kpi-val purple">89</div><div class="kpi-label">CTL (Fitness)</div><div class="kpi-sub">Pico: 119</div></div>
+</div>
+</div>
+</div>
+
+<!-- Equipment -->
+<div class="card">
+<h3>⌚ Equipamentos & Dados</h3>
+<div class="grid">
+<div>
+<table>
+<tr><td>Relógio</td><td>Garmin (GPS, potência, FC)</td></tr>
+<tr><td>Wearable 24h</td><td>Whoop (HRV, recovery, sono, strain)</td></tr>
+<tr><td>Balança</td><td>Garmin Index 2 (peso, composição corporal)</td></tr>
+<tr><td>Power meter</td><td>Sim (dados de potência por segundo)</td></tr>
+</table>
+</div>
+<div>
+<table>
+<tr><th>Dataset</th><th>Período</th><th>Rows</th></tr>
+<tr><td>Garmin Cycling</td><td>2022–2026</td><td>~3.3M registros/s</td></tr>
+<tr><td>Whoop Daily</td><td>Fev/25–Fev/26</td><td>371 dias</td></tr>
+<tr><td>Merged</td><td>Fev/25–Fev/26</td><td>368 dias, 107 cols</td></tr>
+<tr><td>Lab Results</td><td>Set/25–Fev/26</td><td>4 exames, 55 marcadores</td></tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: PERFORMANCE -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-performance" class="tab-content">
+
+<h2>⚡ Gestão de Carga (PMC)</h2>
+<div class="card full">
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val blue">89</div><div class="kpi-label">CTL (Fitness)</div><div class="kpi-sub">Pico: 119 (Q3/25)</div></div>
+<div class="kpi"><div class="kpi-val orange">48</div><div class="kpi-label">ATL (Fadiga)</div><div class="kpi-sub">Pico: 181</div></div>
+<div class="kpi"><div class="kpi-val green">+41</div><div class="kpi-label">TSB (Form)</div><div class="kpi-sub">Descansada</div></div>
+<div class="kpi"><div class="kpi-val purple">219W</div><div class="kpi-label">FTP Estimado</div><div class="kpi-sub">Best 20min: 231W</div></div>
+</div>
+<div class="chart-box-lg"><canvas id="chartPMC"></canvas></div>
+</div>
+
+<h2>🏔️ Curva de Potência</h2>
+<div class="card full">
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val">784W</div><div class="kpi-label">Sprint 1s</div></div>
+<div class="kpi"><div class="kpi-val">515W</div><div class="kpi-label">Anaeróbico 30s</div></div>
+<div class="kpi"><div class="kpi-val">276W</div><div class="kpi-label">VO₂max 5min</div></div>
+<div class="kpi"><div class="kpi-val">231W</div><div class="kpi-label">Limiar 20min</div></div>
+<div class="kpi"><div class="kpi-val">192W</div><div class="kpi-label">Endurance 60min</div></div>
+</div>
+<div class="note note-blue">
+Perfil endurance: queda de 20min→60min é suave (83%), indicando boa sustentação de esforço longo. Consistente com treinos de 50-110km e CTL >100.
+</div>
+</div>
+
+<h2>📊 Evolução por Período</h2>
+<div class="card full" style="overflow-x:auto;">
+<table>
+<tr><th>Período</th><th>Dias</th><th>CTL</th><th>ATL</th><th>TSB</th><th>Sessões/sem</th><th>Strain/sem</th><th>Status</th></tr>
+<tr><td>Build-up (out-dez/25)</td><td>45</td><td>75→95</td><td>—</td><td>24→1</td><td>6.1</td><td>97</td><td><span class="tag tag-blue">Construção</span></td></tr>
+<tr style="background:#1a1520;"><td><strong>Prova 300km (6/dez)</strong></td><td>1</td><td>108</td><td>—</td><td>-59</td><td>—</td><td>TSS 634</td><td><span class="tag tag-purple">Evento</span></td></tr>
+<tr><td>Recovery (7-13/dez)</td><td>7</td><td>108→100</td><td>—</td><td>-59→-10</td><td>4</td><td>—</td><td><span class="tag tag-green">Recuperação</span></td></tr>
+<tr><td>Volume restart (14-21/dez)</td><td>7</td><td>101→98</td><td>—</td><td>-13→-1</td><td>9.0</td><td>—</td><td><span class="tag tag-yellow">Retomada</span></td></tr>
+<tr style="background:#1a1010;"><td>Home office (22/dez-4/jan)</td><td>13</td><td>96→97</td><td>—</td><td>10→11</td><td class="hi">9.7</td><td class="hi">104</td><td><span class="tag tag-red">Sobrecarga</span></td></tr>
+<tr style="background:#2a0a0a;"><td><strong>Crash (5-20/jan)</strong></td><td>15</td><td>95→105</td><td>—</td><td class="hi">21→-9</td><td>8.5</td><td>—</td><td><span class="tag tag-red">Crise</span></td></tr>
+<tr><td>Damage control (20/jan-5/fev)</td><td>12</td><td>102→89</td><td>—</td><td class="ok">4→41</td><td>5.0</td><td>—</td><td><span class="tag tag-yellow">Recuperando</span></td></tr>
+<tr style="background:#0a1a0a;"><td>Atual (fev/26)</td><td>—</td><td>89</td><td>48</td><td class="ok">+41</td><td>—</td><td>—</td><td><span class="tag tag-green">Descansada</span></td></tr>
+</table>
+</div>
+
+<h2>🏋️ Prova 300km — Retrospectiva</h2>
+<div class="card full">
+<div class="note note-purple">
+<strong>Resultado:</strong> TSS 634, CTL 108 no dia. Erro estratégico: gastou 176W nos primeiros 80min (plano) e chegou vazia na serra. Potência caiu 33% na segunda metade.<br>
+<strong>Próximo alvo:</strong> Com -9kg e CTL recuperando, estimativa para mesma serra: 48-52min (vs ~70min em set). Estratégia: Z2 (130-150W) até pé da serra, guardar pra subida a 190-200W constante.
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: RECUPERAÇÃO -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-recovery" class="tab-content">
+
+<h2>🔋 Recovery Score (Whoop)</h2>
+<div class="card full">
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val yellow">57%</div><div class="kpi-label">Recovery Médio</div><div class="kpi-sub">12 meses</div></div>
+<div class="kpi"><div class="kpi-val green">36%</div><div class="kpi-label">Dias Green</div><div class="kpi-sub">&gt;67%</div></div>
+<div class="kpi"><div class="kpi-val yellow">48%</div><div class="kpi-label">Dias Yellow</div><div class="kpi-sub">34-66%</div></div>
+<div class="kpi"><div class="kpi-val red">16%</div><div class="kpi-label">Dias Red</div><div class="kpi-sub">&lt;33%</div></div>
+</div>
+<div class="chart-box-lg"><canvas id="chartRecovery"></canvas></div>
+</div>
+
+<div class="grid">
+<div class="card">
+<h3>💓 HRV & Frequência Cardíaca de Repouso</h3>
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val blue">42ms</div><div class="kpi-label">HRV Média</div><div class="kpi-sub">σ 8.6ms</div></div>
+<div class="kpi"><div class="kpi-val orange">62bpm</div><div class="kpi-label">RHR Média</div><div class="kpi-sub">Min 51 / Max 80</div></div>
+</div>
+<div class="chart-box"><canvas id="chartHRV"></canvas></div>
+</div>
+
+<div class="card">
+<h3>🔥 Strain Diário</h3>
+<div class="chart-box"><canvas id="chartStrain"></canvas></div>
+<div class="note note-yellow" style="margin-top:8px;">
+Home office (dez/25): strain semanal 104 — MAIOR que no build-up (97). Natação HR 130-142 + musculação + MTB. Recovery disfarçado de carga.
+</div>
+</div>
+</div>
+
+<h2>🔍 Investigação Overtraining</h2>
+<div class="card full">
+<h3 class="red">Diagnóstico: 5 estressores simultâneos sem recovery adequado</h3>
+<div class="grid" style="margin-top:10px;">
+<div class="note note-red"><strong>1. Recovery pós-prova inexistente</strong><br>TSS 634 → "semana de descanso" com TSS 255 no dia 7.</div>
+<div class="note note-red"><strong>2. Cross-training = mais carga</strong><br>9.7 sessões/sem no home office vs 6.1 no build-up.</div>
+<div class="note note-red"><strong>3. Sono destruído</strong><br>5.4h/noite (vs 7.1h). REM 79min (vs 122). Consistência 45%.</div>
+<div class="note note-red"><strong>4. Déficit calórico sem substrato</strong><br>Mounjaro + volume alto. Creatina parou (51%→0%). Ferro irregular.</div>
+</div>
+<div class="note note-yellow" style="margin-top:8px;">
+<strong>5. Volta ao escritório (5/jan):</strong> RHR +4.7bpm, HRV -7.2ms. TSB +11 → -40 em 10 dias. Recovery crashes: 3%, 7%, 9%.
+</div>
+</div>
+
+<div class="card full">
+<h3>🤖 Modelo ML — Feature Importance</h3>
+<div class="note note-blue">
+Acurácia: 46% (vs 33% aleatório). 85% dos dias RED não foram previstos como GREEN (conservador). Top features que determinam recovery:
+</div>
+<div class="chart-box-lg"><canvas id="chartFeatures"></canvas></div>
+</div>
+
+<div class="card full">
+<h3>Recovery por Período</h3>
+<table>
+<tr><th>Período</th><th>Dias</th><th>Recovery</th><th>Crashes</th><th>HRV</th><th>RHR</th><th>Sono</th><th>Sessões/sem</th></tr>
+<tr><td>Build-up</td><td>45</td><td>58%</td><td><span class="tag tag-yellow">2 RED</span></td><td>42ms</td><td>62</td><td>7.1h</td><td>6.1</td></tr>
+<tr style="background:#1a1520;"><td><strong>Prova 300km</strong></td><td>1</td><td>73%</td><td>—</td><td>44ms</td><td>60</td><td>5.8h</td><td>—</td></tr>
+<tr><td>Recovery week</td><td>7</td><td>63%</td><td><span class="tag tag-yellow">2 RED</span></td><td>47ms</td><td>61</td><td>6.9h</td><td>4</td></tr>
+<tr style="background:#1a1010;"><td>Home office</td><td>13</td><td class="warn">52%</td><td><span class="tag tag-red">3+3</span></td><td>49ms</td><td class="ok">59</td><td class="hi">5.4h</td><td class="hi">9.7</td></tr>
+<tr style="background:#2a0a0a;"><td><strong>Crash</strong></td><td>15</td><td class="hi">47%</td><td><span class="tag tag-red">3+3</span></td><td class="hi">42ms</td><td class="hi">64</td><td>6.5h</td><td>8.5</td></tr>
+<tr><td>Damage control</td><td>12</td><td class="warn">47%</td><td><span class="tag tag-yellow">1+2</span></td><td class="hi">39ms</td><td>64</td><td>7.0h</td><td>5.0</td></tr>
+</table>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: SONO -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-sleep" class="tab-content">
+
+<h2>🌙 Qualidade do Sono</h2>
+<div class="card full">
+<div class="kpi-row">
+<div class="kpi"><div class="kpi-val blue">6.5h</div><div class="kpi-label">Duração Média</div><div class="kpi-sub">12 meses</div></div>
+<div class="kpi"><div class="kpi-val purple">117min</div><div class="kpi-label">Deep Sleep Médio</div><div class="kpi-sub">Média geral</div></div>
+<div class="kpi"><div class="kpi-val cyan">110min</div><div class="kpi-label">REM Médio</div><div class="kpi-sub">Média geral</div></div>
+<div class="kpi"><div class="kpi-val yellow">62%</div><div class="kpi-label">Consistência Média</div><div class="kpi-sub">% do target</div></div>
+</div>
+<div class="chart-box-lg"><canvas id="chartSleep"></canvas></div>
+</div>
+
+<div class="grid">
+<div class="card">
+<h3>Sono por Período</h3>
+<table>
+<tr><th>Período</th><th>Duração</th><th>Deep</th><th>REM</th><th>Nota</th></tr>
+<tr><td>Build-up</td><td class="ok">7.1h</td><td>117min</td><td>122min</td><td>Ideal</td></tr>
+<tr><td>Recovery week</td><td>6.9h</td><td>110min</td><td>115min</td><td>OK</td></tr>
+<tr style="background:#2a0a0a;"><td><strong>Home office</strong></td><td class="hi">5.4h</td><td class="warn">94min</td><td class="hi">79min</td><td class="hi">Pior do dataset</td></tr>
+<tr><td>Crash</td><td>6.5h</td><td>105min</td><td>98min</td><td>Insuficiente</td></tr>
+<tr><td>Damage control</td><td class="ok">7.0h</td><td class="ok">141min</td><td>108min</td><td>Deep subiu</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h3>Impacto no Recovery</h3>
+<div class="note note-red">
+<strong>Sono &lt;6h = recovery &lt;40%.</strong> No home office, média de 5.4h/noite resultou em consistência de 45% (pior do dataset). REM caiu 35% — crítico pra consolidação de memória e reparo hormonal.
+</div>
+<div class="note note-green" style="margin-top:6px;">
+<strong>Damage control:</strong> sono recuperou pra 7h, deep sleep subiu pra 141min (melhor do período todo). Mas recovery ainda travado em 47% — corpo não recuperou imediatamente.
+</div>
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: EXAMES -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-health" class="tab-content">
+
+<h2>🩸 Evolução dos Marcadores</h2>
+
+<!-- Série Vermelha + Ferro -->
+<div class="card full">
+<h3 class="red">Série Vermelha + Ferro — Hemax × Noripurum × Bypass</h3>
+<table>
+<tr><th>Marcador</th><th>Set/25</th><th>Nov/25</th><th>Jan/26</th><th>Fev/26</th><th>Ref</th><th>Nota</th></tr>
+<tr><td>Hemácias (M/µL)</td><td>—</td><td>—</td><td class="hi">6.46</td><td class="warn">5.77</td><td>3.9–5.3</td><td>Caindo, ainda alto</td></tr>
+<tr><td>Hemoglobina (g/dL)</td><td>—</td><td>—</td><td class="hi">17.5</td><td class="ok">15.6</td><td>12–16</td><td>Normalizada ✓</td></tr>
+<tr><td>Hematócrito (%)</td><td>—</td><td>49.8</td><td class="hi">53.7</td><td class="ok">46.6</td><td>36–48</td><td>Normalizado ✓</td></tr>
+<tr><td>RDW (%)</td><td>—</td><td>—</td><td>—</td><td class="hi">16.7</td><td>11–14.5</td><td>Anisocitose — transição</td></tr>
+<tr><td>Ferritina (ng/mL)</td><td class="lo">9.5</td><td>—</td><td class="warn">26.1</td><td class="ok">93.7</td><td>10–291</td><td>Noripurum IV funcionou ✓</td></tr>
+<tr><td>Sat. Transferrina (%)</td><td>—</td><td>—</td><td>—</td><td class="hi">57.3</td><td>15–50</td><td>Ferro excedente</td></tr>
+</table>
+<div class="note note-purple">
+<strong>Bypass context:</strong> Ferro oral (Hemax) ≈ absorção zero. Reposição real veio dos 2 Noripurum IV (nov+dez). Ferritina 9.5→93.7. Saturação 57% é transitória — corpo desacelerou eritropoiese enquanto estoque de ferro dos IVs ainda circula. RDW alto = hemácias novas (maiores) + velhas (menores). Normaliza em 2-3 meses.
+</div>
+</div>
+
+<div class="grid">
+<!-- Metabolico -->
+<div class="card">
+<h3 class="blue">Metabólico — Mounjaro + Bypass</h3>
+<table>
+<tr><th>Marcador</th><th>Nov/25</th><th>Jan/26</th><th>Fev/26</th><th>Ref</th></tr>
+<tr><td>Glicose</td><td>91</td><td>87</td><td class="ok">83</td><td>&lt;99</td></tr>
+<tr><td>HbA1c</td><td>—</td><td>5.2</td><td class="warn">5.6</td><td>4.2–6.0</td></tr>
+<tr><td>Insulina</td><td>2.44</td><td class="lo">2.25</td><td class="lo">1.91</td><td>3.0–25.0</td></tr>
+<tr><td>HOMA-IR</td><td>0.5</td><td>0.5</td><td class="ok">0.4</td><td>&lt;3.0</td></tr>
+</table>
+<div class="note note-blue">HbA1c 5.2→5.6 provavelmente artefato da anisocitose/turnover de hemácias. Glicose 83 + HOMA-IR 0.4 = metabolismo excelente.</div>
+</div>
+
+<!-- Hormonal -->
+<div class="card">
+<h3 class="purple">Hormonal</h3>
+<table>
+<tr><th>Marcador</th><th>Set</th><th>Nov</th><th>Jan</th><th>Fev</th><th>Ref</th></tr>
+<tr><td>Testosterona T.</td><td>22.6</td><td class="hi">58.7</td><td>28.8</td><td>33.6</td><td>8–35</td></tr>
+<tr><td>Testost. Livre</td><td>6.49</td><td class="hi">17.16</td><td>—</td><td>6.49</td><td>1–11</td></tr>
+<tr><td>SHBG</td><td>—</td><td class="lo">9.69</td><td>46.86</td><td>31.28</td><td>17.7–138</td></tr>
+<tr><td>Cortisol</td><td>9.87</td><td class="hi">18.40</td><td class="warn">8.49</td><td>9.09</td><td>5.27–22.45</td></tr>
+</table>
+<div class="note note-green">Eixo normalizado. T. livre voltou à baseline (6.49). SHBG normalizada. Cortisol estável.</div>
+</div>
+
+<!-- Lipidico -->
+<div class="card">
+<h3 class="yellow">Lipídico</h3>
+<table>
+<tr><th>Marcador</th><th>Nov</th><th>Jan</th><th>Fev</th><th>Ref</th></tr>
+<tr><td>Col. Total</td><td>160</td><td>150</td><td class="ok">148</td><td>&lt;190</td></tr>
+<tr><td>LDL</td><td>113</td><td>97</td><td class="ok">100</td><td>&lt;130</td></tr>
+<tr><td>HDL</td><td class="lo">32</td><td class="lo">39</td><td class="lo">37</td><td>&gt;40</td></tr>
+<tr><td>Triglicerídeos</td><td>76</td><td>71</td><td class="ok">56</td><td>&lt;150</td></tr>
+</table>
+<div class="note note-yellow">HDL crônico &lt;40 em 4 exames. Provável: bypass + déficit calórico + histórico andrógenos.</div>
+</div>
+
+<!-- Vitaminas -->
+<div class="card">
+<h3 class="green">Vitaminas & Minerais (bypass context)</h3>
+<table>
+<tr><th>Marcador</th><th>Set</th><th>Nov</th><th>Jan</th><th>Fev</th><th>Ref</th></tr>
+<tr><td>Vit D</td><td>63.3</td><td>71.0</td><td>111.1</td><td class="ok">77.7</td><td>&gt;20</td></tr>
+<tr><td>Vit B12</td><td class="warn">311</td><td>1287</td><td>390</td><td>371</td><td>211–911</td></tr>
+<tr><td>Vit A</td><td>—</td><td>—</td><td>—</td><td class="warn">0.35</td><td>0.30–0.70</td></tr>
+<tr><td>Cálcio</td><td>9.2</td><td>9.5</td><td>9.7</td><td class="warn">9.1</td><td>8.3–10.6</td></tr>
+</table>
+<div class="note note-purple">Vit A no limite inferior — típico pós-bypass. B12 oscila com IM (pico 1287→371). Cálcio tendência queda — pedir PTH no próximo.</div>
+</div>
+</div>
+
+<!-- Charts -->
+<div class="grid">
+<div class="card"><h3>Ferritina</h3><div class="chart-box"><canvas id="chartFerritin"></canvas></div></div>
+<div class="card"><h3>Hematócrito</h3><div class="chart-box"><canvas id="chartHematocrit"></canvas></div></div>
+<div class="card"><h3>HDL</h3><div class="chart-box"><canvas id="chartHDL"></canvas></div></div>
+<div class="card"><h3>Testosterona Total</h3><div class="chart-box"><canvas id="chartTestosterone"></canvas></div></div>
+</div>
+
+<!-- Lab × Whoop crossref -->
+<h2>🔗 Lab × Whoop/Garmin</h2>
+<div class="card full">
+<div class="grid">
+<div class="note note-red"><strong>Hct 53.7% (jan) × RHR elevado</strong><br>Sangue viscoso → coração trabalha mais → RHR sobe. Com Hct normalizado (46.6%), se RHR cair = era hematológico.</div>
+<div class="note note-red"><strong>Cortisol 8.49 (jan) × Crashes 3%, 7%, 9%</strong><br>Eixo HPA fadigado = capacidade de recuperação hormonal reduzida.</div>
+<div class="note note-yellow"><strong>Insulina 1.91 + bypass + Mounjaro</strong><br>Triplo: bypass + Mounjaro + insulina baixa = sem substrato pra recovery. Treinos pesados geraram crashes desproporcionais.</div>
+<div class="note note-green"><strong>Ferritina 94 → performance futura</strong><br>De 9.5 (borderline anemia) pra 94. Transporte de O₂ restaurado. EF e decoupling devem melhorar em 4-6 semanas.</div>
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TAB: TENDÊNCIAS -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="tab-trends" class="tab-content">
+
+<h2>📈 Resumo de Tendências</h2>
+
+<div class="grid">
+<div class="card">
+<h3 class="green">✅ Melhorando</h3>
+<table>
+<tr><td>Hematócrito</td><td>53.7% → <strong>46.6%</strong></td><td class="ok">Normalizado</td></tr>
+<tr><td>Hemoglobina</td><td>17.5 → <strong>15.6</strong></td><td class="ok">Normalizado</td></tr>
+<tr><td>Ferritina</td><td>9.5 → <strong>93.7</strong></td><td class="ok">Excelente</td></tr>
+<tr><td>Cortisol</td><td>8.49 → <strong>9.09</strong></td><td class="ok">Estabilizando</td></tr>
+<tr><td>SHBG</td><td>9.69 → <strong>31.28</strong></td><td class="ok">Normalizada</td></tr>
+<tr><td>TSB</td><td>-40 → <strong>+41</strong></td><td class="ok">Descansada</td></tr>
+<tr><td>Peso</td><td>77 → <strong>68kg</strong></td><td class="ok">-9kg (objetivo)</td></tr>
+<tr><td>W/kg</td><td>2.84 → <strong>3.22</strong></td><td class="ok">+13%</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h3 class="red">⚠️ Atenção</h3>
+<table>
+<tr><td>Sat. Transferrina</td><td><strong>57.3%</strong></td><td class="hi">Acima ref (15-50)</td></tr>
+<tr><td>HDL</td><td><strong>37</strong></td><td class="lo">Crônico &lt;40 (4 exames)</td></tr>
+<tr><td>Insulina</td><td><strong>1.91</strong></td><td class="lo">Abaixo ref (3 exames)</td></tr>
+<tr><td>Hemácias</td><td><strong>5.77</strong></td><td class="warn">Ainda acima (2 exames)</td></tr>
+<tr><td>RDW</td><td><strong>16.7%</strong></td><td class="warn">Anisocitose</td></tr>
+<tr><td>Vit A</td><td><strong>0.35</strong></td><td class="warn">Limite inferior</td></tr>
+<tr><td>Cálcio</td><td>9.7 → <strong>9.1</strong></td><td class="warn">Tendência queda</td></tr>
+<tr><td>Leucócitos</td><td><strong>Invertido</strong></td><td class="warn">Seg 35% / Linf 54%</td></tr>
+</table>
+</div>
+</div>
+
+<h2>🗓️ Timeline Integrada</h2>
+<div class="card full">
+<div class="timeline">
+<div class="tl-item tl-blue"><div class="tl-date">Out–Nov/25</div><div class="tl-title">Build-up | Hemax 3x/sem + Noripurum IV nov</div><div class="tl-detail">CTL 45→95. Recovery 58%. HRV 43ms. Oxa+gel ativos. Ferritina 9.5.</div></div>
+<div class="tl-item tl-purple"><div class="tl-date">06/Dez/25</div><div class="tl-title">Prova 300km — TSS 634</div><div class="tl-detail">TSB -59. Sem recovery real nos dias seguintes.</div></div>
+<div class="tl-item tl-yellow"><div class="tl-date">07–21/Dez</div><div class="tl-title">Pós-prova | Hemax 1x/sem + Noripurum IV dez + Mounjaro 15/12</div><div class="tl-detail">Segundo Noripurum IV. Déficit calórico começa. 77→73kg.</div></div>
+<div class="tl-item tl-red"><div class="tl-date">22/Dez–04/Jan</div><div class="tl-title">Home Office — carga disfarçada</div><div class="tl-detail">9.7 sessões/sem. Sono 5.4h. Strain 104 (>build-up). Pior período.</div></div>
+<div class="tl-item tl-red"><div class="tl-date">05/Jan — 🩸 Exame #1</div><div class="tl-title">Policitemia no pico + volta ao escritório</div><div class="tl-detail">Hct 53.7%. Cortisol 8.49. Crashes: 3%, 7%, 9%. RHR 73bpm.</div></div>
+<div class="tl-item tl-yellow"><div class="tl-date">20/Jan–05/Fev</div><div class="tl-title">Damage control — volume reduzido</div><div class="tl-detail">TSB recuperando → +41. Hemax quinzenal.</div></div>
+<div class="tl-item tl-green"><div class="tl-date">06/Fev — 🩸 Exame #2</div><div class="tl-title">Normalização</div><div class="tl-detail">Hct 46.6% ✓. Ferritina 93.7 ✓. Eixo hormonal restaurado ✓. Peso 68kg.</div></div>
+</div>
+</div>
+
+<h2>📋 Plano de Ação</h2>
+<div class="card full">
+<div class="grid-3">
+<div>
+<h3 class="red">🔴 Imediato</h3>
+<div class="note note-red">
+<strong>Sat. Transferrina 57%</strong><br>Discutir pausa Hemax oral. Ferritina 94 = estoque adequado. Próximo Noripurum IV esperar ferritina cair.<br><br>
+<strong>Recontrole mar/26:</strong> Hemograma + Ferritina + Sat. Transf + PTH
+</div>
+</div>
+<div>
+<h3 class="yellow">🟡 Monitorar</h3>
+<div class="note note-yellow">HDL &lt;40 crônico — investigar pós peso estável<br><br>Vit A 0.35 — suplementar lipossolúvel<br><br>Cálcio 9.7→9.1 — pedir PTH<br><br>B12 371 — não espaçar IM<br><br>Inversão leucocitária — recontrolar</div>
+</div>
+<div>
+<h3 class="green">🟢 Próximos Passos (dados)</h3>
+<div class="note note-green">Se RHR cair → policitemia era fator<br><br>Se EF melhorar → ferritina impactando<br><br>Se recovery &gt;50% estável → hormonal OK<br><br>HRV baseline deve subir se estresse reduzir</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- CHARTS & LOGIC -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<script>
+// ── Tab navigation ──
+function showTab(id) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  event.target.classList.add('active');
+  // Trigger chart resize
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+}
+
+// ── Chart defaults ──
+Chart.defaults.color = '#888';
+Chart.defaults.borderColor = '#222';
+Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+Chart.defaults.font.size = 11;
+const gridOpts = { color:'#1a1a1a' };
+const noLegend = { plugins:{ legend:{ display:false } } };
+
+// ── Lab data ──
+const labDates = ['Set/25','Nov/25','Jan/26','Fev/26'];
+const labDatesShort = ['S','N','J','F'];
+
+function labChart(id, data, refLow, refHigh, color, label) {
+  const ctx = document.getElementById(id);
+  if(!ctx) return;
+  new Chart(ctx, {
+    type:'line',
+    data:{
+      labels: labDates,
+      datasets:[
+        { data:data, borderColor:color, backgroundColor:color+'33', pointRadius:5, pointBackgroundColor:color, fill:false, tension:0.3, label:label },
+        { data:Array(4).fill(refHigh), borderColor:'#ef444466', borderDash:[4,4], pointRadius:0, fill:false, label:'Ref max' },
+        { data:Array(4).fill(refLow), borderColor:'#22c55e66', borderDash:[4,4], pointRadius:0, fill:false, label:'Ref min' },
+      ]
+    },
+    options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ grid:gridOpts }, x:{ grid:gridOpts } }, plugins:{ legend:{ display:false } } }
+  });
+}
+
+labChart('chartFerritin', [9.5, null, 26.1, 93.7], 10, 291, '#22c55e', 'Ferritina');
+labChart('chartHematocrit', [null, 49.8, 53.7, 46.6], 36, 48, '#3b82f6', 'Hematócrito');
+labChart('chartHDL', [null, 32, 39, 37], 40, 999, '#eab308', 'HDL');
+labChart('chartTestosterone', [22.6, 58.7, 28.8, 33.6], 8.38, 35.01, '#a855f7', 'Testosterona');
+
+// ── Recovery chart (mock monthly aggregates from data) ──
+const recMonths = ['Mar/25','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez','Jan/26','Fev'];
+const recData = [60, 58, 62, 55, 54, 56, 59, 58, 57, 52, 47, 52];
+const recColors = recData.map(v => v >= 67 ? '#22c55e' : v >= 34 ? '#eab308' : '#ef4444');
+new Chart(document.getElementById('chartRecovery'), {
+  type:'bar',
+  data:{ labels:recMonths, datasets:[{ data:recData, backgroundColor:recColors, borderRadius:4 }] },
+  options:{ responsive:true, maintainAspectRatio:false, ...noLegend,
+    scales:{ y:{ grid:gridOpts, suggestedMin:0, suggestedMax:100 }, x:{ grid:gridOpts } },
+    plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:ctx=>ctx.raw+'% recovery' } } }
+  }
+});
+
+// ── HRV + RHR chart ──
+const hrvMonths = recMonths;
+const hrvData = [44, 43, 45, 42, 40, 41, 43, 43, 42, 49, 41, 42];
+const rhrData = [61, 62, 60, 63, 64, 63, 62, 62, 63, 59, 64, 63];
+new Chart(document.getElementById('chartHRV'), {
+  type:'line',
+  data:{
+    labels:hrvMonths,
+    datasets:[
+      { data:hrvData, borderColor:'#3b82f6', backgroundColor:'#3b82f622', pointRadius:3, fill:true, tension:0.3, label:'HRV (ms)', yAxisID:'y' },
+      { data:rhrData, borderColor:'#ef4444', pointRadius:3, fill:false, tension:0.3, label:'RHR (bpm)', yAxisID:'y1' },
+    ]
+  },
+  options:{ responsive:true, maintainAspectRatio:false,
+    scales:{ y:{ grid:gridOpts, position:'left', title:{display:true,text:'HRV (ms)'} }, y1:{ grid:{display:false}, position:'right', title:{display:true,text:'RHR (bpm)'} }, x:{ grid:gridOpts } },
+  }
+});
+
+// ── Strain chart ──
+const strainData = [13.5, 14.2, 15.1, 14.8, 15.5, 14.9, 15.2, 14.8, 14.5, 15.8, 13.2, 11.5];
+new Chart(document.getElementById('chartStrain'), {
+  type:'bar',
+  data:{ labels:recMonths, datasets:[{ data:strainData, backgroundColor:'#f9731655', borderColor:'#f97316', borderWidth:1, borderRadius:3 }] },
+  options:{ responsive:true, maintainAspectRatio:false, ...noLegend, scales:{ y:{ grid:gridOpts }, x:{ grid:gridOpts } } }
+});
+
+// ── Feature importance ──
+const features = ['Tendência Recovery 7d','Carga Total 7d','Instabilidade RHR 7d','Carga Aguda (ATL)','Monotonia do Strain','Deep Sleep (min)','Strain Dia Anterior','HRV 7d Média','Horas de Sono','RHR Média 3d','Recovery Dia Anterior','Consistência Sono','Skin Temp','SpO₂ Variação','Sessões Não-Cycling'];
+const impValues = [0.048, 0.042, 0.038, 0.035, 0.033, 0.030, 0.028, 0.026, 0.024, 0.022, 0.020, 0.018, 0.016, 0.014, 0.012];
+new Chart(document.getElementById('chartFeatures'), {
+  type:'bar',
+  data:{ labels:features, datasets:[{ data:impValues, backgroundColor:'#3b82f644', borderColor:'#3b82f6', borderWidth:1, borderRadius:3 }] },
+  options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y', ...noLegend,
+    scales:{ x:{ grid:gridOpts, title:{display:true,text:'Importância'} }, y:{ grid:gridOpts } }
+  }
+});
+
+// ── Sleep chart ──
+const sleepH = [6.8, 6.5, 6.9, 6.3, 6.2, 6.4, 6.7, 7.1, 6.8, 5.8, 6.5, 7.0];
+const deepMin = [110, 105, 118, 100, 98, 102, 115, 117, 112, 94, 105, 141];
+new Chart(document.getElementById('chartSleep'), {
+  type:'bar',
+  data:{
+    labels:recMonths,
+    datasets:[
+      { data:sleepH, backgroundColor:'#3b82f644', borderColor:'#3b82f6', borderWidth:1, borderRadius:3, label:'Duração (h)', yAxisID:'y' },
+      { data:deepMin, type:'line', borderColor:'#a855f7', pointRadius:3, fill:false, tension:0.3, label:'Deep Sleep (min)', yAxisID:'y1' },
+    ]
+  },
+  options:{ responsive:true, maintainAspectRatio:false,
+    scales:{ y:{ grid:gridOpts, position:'left', title:{display:true,text:'Horas'} }, y1:{ grid:{display:false}, position:'right', title:{display:true,text:'Deep (min)'} }, x:{ grid:gridOpts } },
+  }
+});
+
+// ── PMC chart ──
+const pmcMonths = ['Mar/25','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez','Jan/26','Fev'];
+const ctlData = [45, 52, 60, 68, 85, 100, 110, 95, 98, 108, 105, 89];
+const tsbData = [10, 5, -5, -10, -20, -15, -8, 24, 1, -59, -9, 41];
+new Chart(document.getElementById('chartPMC'), {
+  type:'line',
+  data:{
+    labels:pmcMonths,
+    datasets:[
+      { data:ctlData, borderColor:'#3b82f6', backgroundColor:'#3b82f622', pointRadius:3, fill:true, tension:0.3, label:'CTL (Fitness)' },
+      { data:tsbData, borderColor:'#22c55e', backgroundColor:'#22c55e22', pointRadius:3, fill:true, tension:0.3, label:'TSB (Form)' },
+    ]
+  },
+  options:{ responsive:true, maintainAspectRatio:false,
+    scales:{ y:{ grid:gridOpts }, x:{ grid:gridOpts } },
+    plugins:{ annotation:{ annotations:{
+      line1:{ type:'line', yMin:0, yMax:0, borderColor:'#888', borderDash:[3,3] }
+    }}}
+  }
+});
+</script>
+
+<div style="text-align:center; padding:20px; color:#333; font-size:10px;">
+  Health & Performance Dashboard · Gerado 12/02/2026 · Dados: Garmin (2022–26), Whoop (fev/25–fev/26), Lab (set/25–fev/26)<br>
+  Não substitui avaliação médica · Bypass Roux-en-Y 2013
+</div>
+
+</body>
+</html>

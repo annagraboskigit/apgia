@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Health Dashboard — Lab × Training × Medical History</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0a0a; color:#e0e0e0; font-family:'Segoe UI',system-ui,sans-serif; padding:20px; line-height:1.6; font-size:13px; }
+.container { max-width:1200px; margin:0 auto; }
+h1 { font-size:22px; margin-bottom:4px; }
+.subtitle { color:#888; font-size:12px; margin-bottom:24px; }
+h2 { font-size:17px; margin:32px 0 12px; padding-bottom:6px; border-bottom:1px solid #333; }
+h3 { font-size:14px; margin:0 0 8px; }
+h4 { font-size:12px; color:#888; margin:12px 0 6px; text-transform:uppercase; letter-spacing:0.5px; }
+
+.card { background:#141414; border:1px solid #222; border-radius:8px; padding:16px; margin-bottom:12px; }
+.card-full { grid-column: 1 / -1; }
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+@media(max-width:900px) { .grid, .grid-3 { grid-template-columns:1fr; } }
+
+.green { color:#22c55e; } .yellow { color:#eab308; } .red { color:#ef4444; }
+.blue { color:#3b82f6; } .purple { color:#a855f7; } .orange { color:#f97316; }
+.dim { color:#666; } .dimm { color:#555; font-size:11px; }
+
+.tag { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; margin:2px; }
+.tag-red { background:#3a1111; color:#ef4444; }
+.tag-yellow { background:#3a3011; color:#eab308; }
+.tag-green { background:#113a11; color:#22c55e; }
+.tag-blue { background:#111133; color:#3b82f6; }
+.tag-purple { background:#1a0a2a; color:#a855f7; }
+
+.finding { padding:12px; border-radius:6px; margin:8px 0; line-height:1.7; }
+.finding-red { background:#1a0a0a; border:1px solid #3a1111; }
+.finding-yellow { background:#1a1700; border:1px solid #3a3011; }
+.finding-green { background:#0a1a0a; border:1px solid #113a11; }
+.finding-blue { background:#0a0a1a; border:1px solid #11113a; }
+.finding-purple { background:#0f0a1a; border:1px solid #1a113a; }
+
+table { width:100%; border-collapse:collapse; font-size:12px; margin:8px 0; }
+th { text-align:left; padding:6px 8px; border-bottom:2px solid #333; color:#888; font-weight:600; }
+td { padding:6px 8px; border-bottom:1px solid #1a1a1a; }
+tr:hover { background:#1a1a1a; }
+td.hi { color:#ef4444; font-weight:600; }
+td.lo { color:#f97316; font-weight:600; }
+td.ok { color:#22c55e; }
+td.warn { color:#eab308; }
+
+.timeline { position:relative; padding-left:20px; border-left:2px solid #333; margin:16px 0 16px 10px; }
+.timeline-item { position:relative; padding:8px 0 20px 16px; }
+.timeline-item::before { content:''; position:absolute; left:-26px; top:12px; width:12px; height:12px; border-radius:50%; border:2px solid; }
+.tl-red::before { border-color:#ef4444; background:#3a1111; }
+.tl-yellow::before { border-color:#eab308; background:#3a3011; }
+.tl-green::before { border-color:#22c55e; background:#113a11; }
+.tl-blue::before { border-color:#3b82f6; background:#11113a; }
+.tl-purple::before { border-color:#a855f7; background:#1a0a2a; }
+.tl-date { font-size:11px; color:#888; font-weight:600; }
+.tl-title { font-size:13px; font-weight:600; margin:2px 0; }
+.tl-detail { font-size:12px; color:#aaa; line-height:1.7; }
+
+.kpi-row { display:flex; gap:12px; flex-wrap:wrap; margin:8px 0; }
+.kpi { background:#1a1a1a; border:1px solid #2a2a2a; border-radius:6px; padding:10px 14px; min-width:120px; flex:1; }
+.kpi-val { font-size:20px; font-weight:700; }
+.kpi-label { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.5px; }
+.kpi-sub { font-size:10px; color:#555; margin-top:2px; }
+
+.pill { display:inline-block; padding:1px 6px; border-radius:10px; font-size:10px; font-weight:600; }
+.pill-red { background:#3a1111; color:#ef4444; }
+.pill-green { background:#113a11; color:#22c55e; }
+.pill-yellow { background:#3a3011; color:#eab308; }
+
+.sep { border:0; border-top:1px solid #222; margin:16px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>🔬 Health Dashboard — Lab × Training × Medical History</h1>
+<p class="subtitle">Paciente: Feminino, 36 anos | Bypass gástrico (Roux-en-Y) 2013 — 13 anos | Ciclista endurance | Peso: 77→68kg (Mounjaro desde 15/12/25)</p>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>⚕️ Contexto Médico — Impacto no Quadro</h2>
+
+<div class="card card-full">
+<div class="grid">
+<div>
+<h3>Bypass Gástrico Roux-en-Y (2013)</h3>
+<div class="finding finding-purple">
+<strong>Absorção permanentemente alterada:</strong><br>
+• <strong>Ferro oral:</strong> absorção negligenciável. Hemax oral não repõe estoque — reposição real é IV (Noripurum).<br>
+• <strong>B12:</strong> absorção oral comprometida. Depende de IM/sublingual.<br>
+• <strong>Lipossolúveis (A, D, E, K):</strong> absorção reduzida. Vitamina A em 0,35 (limite inferior) confirma.<br>
+• <strong>Cálcio:</strong> absorção reduzida. Risco de perda óssea silenciosa a longo prazo.<br>
+• <strong>Proteínas/aminoácidos:</strong> absorção parcial — impacta síntese muscular.<br>
+• <strong>Recovery pós-treino:</strong> estruturalmente limitada vs anatomia normal. Modelos de treinamento padrão superestimam a capacidade de recuperação.
+</div>
+</div>
+<div>
+<h3>Medicações e Suplementação Ativa</h3>
+<table>
+<tr><th>Substância</th><th>Via</th><th>Regime</th><th>Desde</th></tr>
+<tr><td>Mounjaro (tirzepatida) 2.5mg</td><td>SC</td><td>1x/semana</td><td>15/12/25</td></tr>
+<tr><td>Noripurum (ferro sacarato)</td><td>IV</td><td>1x/mês (nov+dez)</td><td>Nov/25</td></tr>
+<tr><td>Hemax Eritron</td><td>Oral</td><td>3x→1x→quinzenal</td><td>Out/25</td></tr>
+<tr><td>Oxandrolona 5mg</td><td>Oral</td><td>Variável (ver journal)</td><td>—</td></tr>
+<tr><td>Suplementação geral</td><td>Oral/IM</td><td>B12, D, zinco, etc.</td><td>Contínuo</td></tr>
+</table>
+<div class="dimm" style="margin-top:8px;">
+Nota: Ferro oral (Hemax) tem absorção negligenciável pós-bypass. Noripurum IV é a via efetiva de reposição.
+</div>
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>📅 Timeline Integrada — Out/25 → Fev/26</h2>
+
+<div class="card card-full">
+<div class="timeline">
+
+<div class="timeline-item tl-blue">
+<div class="tl-date">Out–Nov 2025 — BUILD-UP</div>
+<div class="tl-title">Preparação 300km | Hemax 3x/sem + Noripurum IV nov</div>
+<div class="tl-detail">
+<span class="tag tag-blue">CTL 45→95</span> <span class="tag tag-green">Recovery 58%</span> <span class="tag tag-blue">HRV 43ms</span> <span class="tag tag-blue">Sleep 7.1h</span><br>
+Strain semanal 97. Oxa 5mg ativa. 6.1 sessões/semana.<br>
+<strong>Exame 19/nov:</strong> Hct 49,8% (já elevado). Ferritina 9,5 (baixa — pré-Noripurum). Testosterona 58,7 (pico — oxa+gel). SHBG 9,69 (suprimida). Cortisol 18,4 (alto — resposta ao stress de treino).
+</div>
+</div>
+
+<div class="timeline-item tl-purple">
+<div class="tl-date">06/Dez 2025 — PROVA</div>
+<div class="tl-title">300km — TSS 634 | TSB -59</div>
+<div class="tl-detail">Evento-alvo. Corpo no limite. Sem recovery real nos dias seguintes (TSS 255 no dia 13/12).</div>
+</div>
+
+<div class="timeline-item tl-yellow">
+<div class="tl-date">07–21/Dez — PÓS-PROVA</div>
+<div class="tl-title">Hemax 1x/sem | Noripurum IV dez | Mounjaro iniciado 15/12</div>
+<div class="tl-detail">
+Segundo Noripurum IV em dezembro — acúmulo de ferro sobre o de novembro.<br>
+Mounjaro 2.5mg/sem iniciado. Déficit calórico progressivo começa.
+</div>
+</div>
+
+<div class="timeline-item tl-red">
+<div class="tl-date">22/Dez–04/Jan — HOME OFFICE</div>
+<div class="tl-title">Carga disfarçada de recovery</div>
+<div class="tl-detail">
+<span class="tag tag-red">9.7 sessões/sem</span> <span class="tag tag-red">Sleep 5.4h</span> <span class="tag tag-red">REM 79min</span> <span class="tag tag-yellow">Strain 104</span><br>
+Natação HR 130-142 + musculação + MTB. Volume MAIOR que no build-up.<br>
+Sono destruído: consistência 45% (pior do dataset). Corpo sem condição de recuperar.
+</div>
+</div>
+
+<div class="timeline-item tl-red">
+<div class="tl-date">05/Jan 2026 — 🩸 EXAME #1</div>
+<div class="tl-title blue">Coleta de sangue + volta ao escritório</div>
+<div class="tl-detail">
+<span class="tag tag-red">Hct 53,7%</span> <span class="tag tag-red">Hb 17,5</span> <span class="tag tag-yellow">Ferritina 26</span> <span class="tag tag-red">Cortisol 8,49</span> <span class="tag tag-red">VitC 3,70</span><br>
+Policitemia no pico. Corpo com estoque de ferro subindo (Noripurum IV fazendo efeito) mas eritropoiese descontrolada pela combinação andrógenos + estímulo do treino.<br>
+Whoop: RHR subindo +4.7bpm, HRV caindo -7.2ms. TSB despenca de +11 → -40.
+</div>
+</div>
+
+<div class="timeline-item tl-red">
+<div class="tl-date">05–20/Jan — CRASH</div>
+<div class="tl-title">Escritório 10h + trânsito + déficit calórico</div>
+<div class="tl-detail">
+<span class="tag tag-red">Recovery 3%</span> <span class="tag tag-red">Recovery 7%</span> <span class="tag tag-red">Recovery 9%</span> <span class="tag tag-red">RHR 73</span><br>
+Hemax reduzido para quinzenal. Pior período do dataset inteiro.
+</div>
+</div>
+
+<div class="timeline-item tl-yellow">
+<div class="tl-date">20/Jan–05/Fev — DAMAGE CONTROL</div>
+<div class="tl-title">Redução de volume | TSB recuperando → +41</div>
+<div class="tl-detail">Corpo respondendo à redução. Hemax quinzenal mantido. Sem Noripurum IV (último em dez).</div>
+</div>
+
+<div class="timeline-item tl-green">
+<div class="tl-date">06/Fev 2026 — 🩸 EXAME #2</div>
+<div class="tl-title blue">Coleta de sangue — 1 mês depois</div>
+<div class="tl-detail">
+<span class="tag tag-green">Hct 46,6%</span> <span class="tag tag-green">Hb 15,6</span> <span class="tag tag-green">Ferritina 93,7</span> <span class="tag tag-red">Sat.Transf 57%</span> <span class="tag tag-yellow">RDW 16,7%</span><br>
+Policitemia resolvida. Ferro sobrando no sangue (sem Noripurum desde dez, mas estoque alto).<br>
+Eixo hormonal normalizando: SHBG 31, testosterona 33,6, cortisol 9,09.
+</div>
+</div>
+
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>📊 Evolução Completa dos Marcadores</h2>
+
+<div class="card card-full">
+<h3 class="red">🩸 Série Vermelha + Ferro — Hemax × Noripurum × Bypass</h3>
+<table>
+<tr><th>Marcador</th><th>Set/25</th><th>Nov/25</th><th>Jan/26</th><th>Fev/26</th><th>Ref (F)</th><th>Nota</th></tr>
+<tr><td>Hemácias (M/µL)</td><td>—</td><td>—</td><td class="hi">6,46</td><td class="warn">5,77</td><td>3,9–5,3</td><td>Caindo, ainda alto</td></tr>
+<tr><td>Hemoglobina (g/dL)</td><td>—</td><td>—</td><td class="hi">17,5</td><td class="ok">15,6</td><td>12–16</td><td>Normalizada</td></tr>
+<tr><td>Hematócrito (%)</td><td>—</td><td>49,8</td><td class="hi">53,7</td><td class="ok">46,6</td><td>36–48</td><td>Normalizado ✓</td></tr>
+<tr><td>VGM (fl)</td><td>—</td><td>—</td><td>—</td><td>80,8</td><td>80–100</td><td>Limite inferior</td></tr>
+<tr><td>RDW (%)</td><td>—</td><td>—</td><td>—</td><td class="hi">16,7</td><td>11–14,5</td><td>Anisocitose — transição</td></tr>
+<tr><td>Ferritina (ng/mL)</td><td class="lo">9,5</td><td>—</td><td class="warn">26,1</td><td class="ok">93,7</td><td>10–291</td><td>Noripurum IV funcionou</td></tr>
+<tr><td>Sat. Transferrina (%)</td><td>—</td><td>—</td><td>—</td><td class="hi">57,3</td><td>15–50</td><td>Ferro excedente circulando</td></tr>
+</table>
+<div class="finding finding-purple">
+<strong>Leitura pós-bypass:</strong> O ferro oral (Hemax) tem absorção negligenciável com bypass Roux-en-Y. A reposição real veio dos 2 Noripurum IV (nov+dez). Ferritina 9,5 (set) → 93,7 (fev) = estoque carregado. A saturação de transferrina em 57% é transitória: o corpo desacelerou a eritropoiese (menos oxa, menos demanda), mas o estoque de ferro dos 2 IV recentes ainda está circulando. Sem nova infusão desde dez, tende a normalizar. RDW alto + anisocitose = hemácias novas (maiores, com ferro) convivendo com hemácias velhas (menores, da fase de ferro baixo). Normaliza em 2-3 meses com o turnover celular.
+</div>
+</div>
+
+<div class="grid">
+<div class="card">
+<h3 class="blue">⚡ Metabólico — Mounjaro + Bypass</h3>
+<table>
+<tr><th>Marcador</th><th>Nov/25</th><th>Jan/26</th><th>Fev/26</th><th>Ref</th></tr>
+<tr><td>Glicose (mg/dL)</td><td>91</td><td>87</td><td class="ok">83</td><td>&lt;99</td></tr>
+<tr><td>HbA1c (%)</td><td>—</td><td>5,2</td><td class="warn">5,6</td><td>4,2–6,0</td></tr>
+<tr><td>Insulina (mU/L)</td><td>2,44</td><td class="lo">2,25</td><td class="lo">1,91</td><td>3,0–25,0</td></tr>
+<tr><td>HOMA-IR</td><td>0,5</td><td>0,5</td><td class="ok">0,4</td><td>&lt;3,0</td></tr>
+<tr><td>HOMA-beta</td><td>—</td><td>—</td><td>35,0</td><td>—</td></tr>
+</table>
+<div class="finding finding-blue">
+HbA1c 5,2→5,6: provavelmente <strong>artefato</strong> da anisocitose/turnover de hemácias alterado, não piora metabólica real. Glicose 83 + HOMA-IR 0,4 confirmam metabolismo glicêmico excelente. Insulina abaixo da ref é efeito esperado do Mounjaro + bypass (bypass por si só já melhora sensibilidade insulínica).
+</div>
+</div>
+
+<div class="card">
+<h3 class="purple">🧬 Hormonal</h3>
+<table>
+<tr><th>Marcador</th><th>Set/25</th><th>Nov/25</th><th>Jan/26</th><th>Fev/26</th><th>Ref</th></tr>
+<tr><td>Testosterona Total</td><td>22,6</td><td class="hi">58,7</td><td>28,8</td><td>33,6</td><td>8–35</td></tr>
+<tr><td>Testost. Livre (pg/mL)</td><td>6,49</td><td class="hi">17,16</td><td>—</td><td>6,49</td><td>1–11</td></tr>
+<tr><td>SHBG (nmol/L)</td><td>—</td><td class="lo">9,69</td><td>46,86</td><td>31,28</td><td>17,7–138</td></tr>
+<tr><td>Estradiol (pg/mL)</td><td>31,4</td><td>53,4</td><td>80,5</td><td>28,6</td><td>Fase-dep.</td></tr>
+<tr><td>DHEA-SO4 (µg/dL)</td><td>106,8</td><td>145,1</td><td>130,3</td><td class="warn">92,1</td><td>25,9–460</td></tr>
+<tr><td>Cortisol manhã (µg/dL)</td><td>9,87</td><td class="hi">18,40</td><td class="warn">8,49</td><td>9,09</td><td>5,27–22,45</td></tr>
+<tr><td>Prolactina (ng/mL)</td><td>7,15</td><td>—</td><td>6,81</td><td>5,28</td><td>2,8–29,2</td></tr>
+<tr><td>TSH (µIU/mL)</td><td>—</td><td>0,86</td><td>1,10</td><td>0,77</td><td>0,55–4,78</td></tr>
+</table>
+<div class="finding finding-green">
+Eixo hormonal normalizando. Nov/25 = pico exógeno (oxa+gel): testosterona 58,7, SHBG suprimida a 9,69. Fev/26 = baseline restaurada: testosterona livre 6,49 (idêntica a set/25), SHBG 31,28 (normal). Cortisol estabilizou (9,09 vs 8,49). DHEA-SO4 caindo (92 vs 130) mas dentro da faixa — possível reflexo do estresse crônico consumindo precursores adrenais.
+</div>
+</div>
+</div>
+
+<div class="grid">
+<div class="card">
+<h3 class="yellow">🫀 Lipídico + Cardiovascular</h3>
+<table>
+<tr><th>Marcador</th><th>Nov/25</th><th>Jan/26</th><th>Fev/26</th><th>Ref</th></tr>
+<tr><td>Col. Total</td><td>160</td><td>150</td><td class="ok">148</td><td>&lt;190</td></tr>
+<tr><td>LDL</td><td>113</td><td>97</td><td class="ok">100</td><td>&lt;130</td></tr>
+<tr><td>HDL</td><td class="lo">32</td><td class="lo">39</td><td class="lo">37</td><td>&gt;40</td></tr>
+<tr><td>Triglicerídeos</td><td>76</td><td>71</td><td class="ok">56</td><td>&lt;150</td></tr>
+<tr><td>VLDL</td><td>15</td><td>14</td><td class="ok">11</td><td>≤30</td></tr>
+<tr><td>Castelli I</td><td>—</td><td>—</td><td class="warn">4,00</td><td>&lt;4,4</td></tr>
+<tr><td>Castelli II</td><td>—</td><td>—</td><td class="warn">2,7</td><td>&lt;2,9</td></tr>
+<tr><td>Col. não-HDL</td><td>—</td><td>—</td><td>111</td><td>&lt;160</td></tr>
+<tr><td>PCR (mg/dL)</td><td>&lt;0,40</td><td>&lt;0,40</td><td class="ok">&lt;0,40</td><td>&lt;1,0</td></tr>
+</table>
+<div class="finding finding-yellow">
+HDL cronicamente &lt;40 em 4 exames consecutivos. Em pós-bypass, a absorção de gorduras é reduzida, o que pode contribuir. Combinação provável: genética + bypass (má absorção de gorduras/colesterol) + déficit calórico + histórico de andrógenos (reduzem HDL). PCR indetectável = sem inflamação sistêmica. Risco cardiovascular real provavelmente menor que os índices de Castelli sugerem.
+</div>
+</div>
+
+<div class="card">
+<h3 class="green">🧪 Vitaminas, Minerais, Outros</h3>
+<table>
+<tr><th>Marcador</th><th>Set/25</th><th>Nov/25</th><th>Jan/26</th><th>Fev/26</th><th>Ref</th><th>Nota</th></tr>
+<tr><td>Vit D 25-OH</td><td>63,3</td><td>71,0</td><td>111,1</td><td>77,7</td><td>&gt;20</td><td class="ok">Suplementação OK</td></tr>
+<tr><td>Vit B12</td><td>311</td><td>1287</td><td>390</td><td>371</td><td>211–911</td><td class="warn">Oscila com IM</td></tr>
+<tr><td>Vit A</td><td>—</td><td>—</td><td>—</td><td class="warn">0,35</td><td>0,30–0,70</td><td>Limite inferior (bypass)</td></tr>
+<tr><td>Zinco</td><td>—</td><td>—</td><td>91,5</td><td class="ok">108,4</td><td>60–120</td><td>OK</td></tr>
+<tr><td>Magnésio</td><td>2,1</td><td>—</td><td>2,0</td><td class="ok">2,1</td><td>1,6–2,6</td><td>Estável</td></tr>
+<tr><td>Cálcio</td><td>9,2</td><td>9,5</td><td>9,7</td><td class="ok">9,1</td><td>8,3–10,6</td><td class="warn">Tendência queda</td></tr>
+<tr><td>Fósforo</td><td>—</td><td>—</td><td>3,4</td><td class="ok">3,6</td><td>2,4–5,1</td><td>OK</td></tr>
+<tr><td>Sódio</td><td>137</td><td>140</td><td>136</td><td class="ok">140</td><td>136–145</td><td>OK</td></tr>
+<tr><td>Potássio</td><td>5,1</td><td>5,1</td><td>4,5</td><td class="ok">4,7</td><td>3,5–5,1</td><td>OK</td></tr>
+<tr><td>Ác. Úrico</td><td>4,4</td><td>5,4</td><td>5,0</td><td class="ok">5,3</td><td>3,1–7,8</td><td>OK</td></tr>
+<tr><td>Creatinina</td><td>0,88</td><td>0,95</td><td>0,90</td><td class="ok">0,84</td><td>0,55–1,02</td><td>Melhorando</td></tr>
+<tr><td>TFG (mL/min)</td><td>—</td><td>—</td><td>—</td><td class="ok">92,3</td><td>≥90</td><td>OK</td></tr>
+<tr><td>TGO/AST</td><td>—</td><td>22</td><td>—</td><td class="ok">26</td><td>&lt;34</td><td>OK</td></tr>
+<tr><td>TGP/ALT</td><td>—</td><td>26</td><td>—</td><td class="ok">31</td><td>10–49</td><td>OK</td></tr>
+<tr><td>Bilirrubina total</td><td>—</td><td>—</td><td>—</td><td class="ok">0,73</td><td>0,3–1,2</td><td>OK</td></tr>
+<tr><td>Albumina</td><td>—</td><td>—</td><td>—</td><td class="ok">3,8</td><td>3,2–4,8</td><td>OK (bypass)</td></tr>
+</table>
+<div class="finding finding-purple">
+<strong>Pós-bypass 13 anos — monitoramento:</strong> Vitamina A no limite inferior (0,35) é o marcador que mais acusa a má absorção. B12 oscila com IM (pico 1287 em nov, agora 371 — espaçamento entre doses aparente). Cálcio 9,7→9,1 tendência de queda sutil — sem PTH neste exame, não dá pra saber se o corpo está compensando com reabsorção óssea. Albumina 3,8 OK — proteína sendo absorvida adequadamente. Vitamina D 77,7 excelente — suplementação mantendo.
+</div>
+</div>
+</div>
+
+<div class="card card-full">
+<h3>🔬 Hemograma — Leucócitos</h3>
+<div class="grid">
+<div>
+<table>
+<tr><th>Marcador</th><th>Jan/26</th><th>Fev/26</th><th>Ref</th></tr>
+<tr><td>Leucócitos totais</td><td>4.600</td><td class="ok">4.650</td><td>3.600–11.000</td></tr>
+<tr><td>Segmentados (%)</td><td>—</td><td class="lo">35%</td><td>40–78%</td></tr>
+<tr><td>Linfócitos (%)</td><td>—</td><td class="hi">54%</td><td>20–50%</td></tr>
+<tr><td>Monócitos (%)</td><td>—</td><td class="ok">6%</td><td>2–10%</td></tr>
+<tr><td>Eosinófilos (%)</td><td>—</td><td class="ok">3%</td><td>1–5%</td></tr>
+<tr><td>Basófilos (%)</td><td>—</td><td class="ok">1%</td><td>0–2%</td></tr>
+<tr><td>Plaquetas</td><td>251.000</td><td class="ok">228.000</td><td>140–400k</td></tr>
+</table>
+</div>
+<div>
+<div class="finding finding-yellow">
+Inversão segmentados/linfócitos: neutrófilos abaixo (35%) e linfócitos acima (54%) da faixa. Leucócitos totais normais. Possíveis causas: overtraining crônico (altera distribuição leucocitária), infecção viral subclínica recente, ou padrão constitucional. PCR indetectável descarta inflamação ativa. Sem leucograma diferencial do exame de jan pra comparar diretamente. Vale recontrolar no próximo exame — se persistir, investigar.
+</div>
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>🔗 Cruzamento: Lab × Whoop/Garmin</h2>
+
+<div class="card card-full">
+<div class="grid">
+
+<div class="finding finding-red">
+<strong>Hematócrito 53,7% (jan) × RHR elevado no Whoop</strong><br>
+Sangue viscoso → coração trabalha mais → RHR sobe. Explica parcialmente o RHR >66bpm e os crashes de recovery em janeiro. Com hematócrito normalizado (46,6%), se o RHR cair nas próximas semanas no Whoop, confirma que o componente hematológico era significativo.
+</div>
+
+<div class="finding finding-red">
+<strong>Cortisol 8,49 (jan) × Recovery crashes 3%, 7%, 9%</strong><br>
+Eixo HPA fadigado = capacidade hormonal de responder ao estresse reduzida. Não era só carga — o corpo não tinha como recuperar hormonalmente. Cortisol estabilizando (9,09 em fev) coincide com recovery melhorando no Whoop.
+</div>
+
+<div class="finding finding-yellow">
+<strong>Insulina 1,91 + bypass + Mounjaro × treino sem substrato</strong><br>
+Triplo: bypass reduz absorção de nutrientes + Mounjaro suprime apetite + insulina baixa prejudica ressíntese de glicogênio. Treinos pesados geraram crashes desproporcionais porque não havia substrato pra recuperar. Modelo de treinamento precisa considerar que a "taxa de recarga" desse corpo é estruturalmente menor.
+</div>
+
+<div class="finding finding-green">
+<strong>Ferritina 94 (fev) × performance futura</strong><br>
+Em set/25 a ferritina era 9,5 — borderline anemia de atleta. Agora 94 — reserva adequada. Ferro = transporte de O₂. Impacto esperado: EF melhorando, decoupling menor, capacidade aeróbia subindo. O Garmin deve capturar nas próximas 4-6 semanas conforme as hemácias novas (com ferro) substituem as velhas.
+</div>
+
+<div class="finding finding-yellow">
+<strong>HDL 37 crônico × volume de endurance</strong><br>
+HDL deveria subir com aeróbico. Com esse volume e HDL nunca batendo 40: bypass (má absorção) + déficit calórico + histórico andrógenos. Quando peso estabilizar e andrógenos cessarem, vale reteste isolado.
+</div>
+
+<div class="finding finding-purple">
+<strong>Bypass × modelo de recovery do Whoop</strong><br>
+O Whoop calibra recovery baseado em HRV, RHR e sono. Mas não sabe que a absorção de nutrientes é 60-70% da normal. Os targets de strain que o Whoop sugere podem estar superestimados para pós-bypass. A "regra dos 2 dias RED = rest day obrigatório" precisa ser mais conservadora: talvez 1 dia RED já justifique redução.
+</div>
+
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>✅ Plano de Ação — Priorizado</h2>
+
+<div class="card card-full">
+<div class="grid-3">
+
+<div>
+<h3 class="red">🔴 Ação imediata</h3>
+<div class="finding finding-red">
+<strong>Saturação transferrina 57%</strong><br>
+Discutir pausa do Hemax oral (baixa utilidade pós-bypass). Avaliar se próximo Noripurum IV espera até ferritina cair. Ferritina 94 = reserva adequada pra meses.<br><br>
+<strong>Recontrole em 4-6 semanas:</strong><br>
+Ferritina + sat. transferrina + hemograma (RDW).
+</div>
+</div>
+
+<div>
+<h3 class="yellow">🟡 Monitorar</h3>
+<div class="finding finding-yellow">
+<strong>HDL &lt;40 crônico</strong> — investigar pós estabilização de peso<br><br>
+<strong>Vitamina A 0,35</strong> — limite inferior, suplementar lipossolúvel<br><br>
+<strong>Cálcio 9,7→9,1</strong> — pedir PTH no próximo exame<br><br>
+<strong>B12 371</strong> — OK mas sem margem, não espaçar demais IM<br><br>
+<strong>Inversão leucocitária</strong> — recontrolar, comparar com baseline
+</div>
+</div>
+
+<div>
+<h3 class="green">🟢 Resolvido / OK</h3>
+<div class="finding finding-green">
+✓ Hematócrito normalizado<br>
+✓ Hemoglobina normalizada<br>
+✓ Ferritina adequada (94)<br>
+✓ Eixo hormonal restaurado<br>
+✓ Cortisol estabilizando<br>
+✓ Função renal e hepática OK<br>
+✓ Tireoide, B12, minerais OK<br>
+✓ Sem inflamação (PCR &lt;0,40)<br>
+✓ Metabolismo glicêmico excelente
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="card card-full">
+<h3 class="blue">📡 Próximos exames sugeridos (Março/26)</h3>
+<div class="finding finding-blue">
+<strong>Recontrole dirigido:</strong> Hemograma completo + Ferritina + Saturação de transferrina + Lipidograma + Insulina + HbA1c + PTH (novo) + Vitamina A<br><br>
+<strong>Dados Whoop/Garmin a cruzar:</strong> RHR trend (policitemia?), EF trend (ferro ajudando?), Recovery baseline (hormonal?), HRV stability
+</div>
+</div>
+
+<div style="text-align:center; padding:20px; color:#444; font-size:11px;">
+Gerado em 12/02/2026 — Dados: exames 19/11/25, 05/01/26, 06/02/26 + Whoop/Garmin Oct/25–Feb/26<br>
+Não substitui avaliação médica. Contexto: bypass gástrico Roux-en-Y 2013.
+</div>
+
+</div>
+</body>
+</html>
