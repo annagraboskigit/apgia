@@ -20,6 +20,9 @@ venv/
 *.gpx
 *.csv
 
+# Streamlit secrets (contém service_role key)
+.streamlit/secrets.toml
+
 # Archives
 *.zip
 *.tar.gz
