@@ -57,6 +57,9 @@ def _get_redirect_url():
         base = st.secrets.get("APP_URL", "http://localhost:8501")
     except Exception:
         base = "http://localhost:8501"
+    # Ensure trailing slash
+    if not base.endswith("/"):
+        base += "/"
     return base
 
 
@@ -142,7 +145,7 @@ def auth_guard():
     </style>
     <div class="login-container">
         <div class="login-title">APGIA</div>
-        <div class="login-sub">Saude & Performance Dashboard</div>
+        <div class="login-sub"></div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -160,12 +163,12 @@ def auth_guard():
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
         st.link_button(
-            "Entrar com Microsoft (Azure AD)",
+            "Login MS SSO",
             oauth_url,
             use_container_width=True,
             type="primary",
         )
-        st.caption("SSO corporativo — mesmo login do Scout")
+        pass  # clean login, no extra caption
 
     st.stop()
     return False
