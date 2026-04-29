@@ -14,7 +14,6 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import datetime
-import hashlib, base64, secrets as _secrets
 from supabase import create_client
 from urllib.parse import urlencode
 
@@ -60,40 +59,28 @@ def get_sb_auth():
     return create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 
-# ── Auth: Azure AD via Supabase OAuth (PKCE flow) ───────────────
+# ── Auth: Azure AD via Supabase OAuth (implicit flow) ────────────
 REDIRECT_URL = "https://apgia-dashboard.streamlit.app/"
-
-
-def _generate_pkce():
-    """Generate PKCE code_verifier + code_challenge (S256)."""
-    verifier = base64.urlsafe_b64encode(_secrets.token_bytes(32)).rstrip(b"=").decode()
-    challenge = (
-        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
-        .rstrip(b"=")
-        .decode()
-    )
-    return verifier, challenge
 
 
 def auth_guard():
     """
-    Check authentication via Azure AD + Supabase PKCE OAuth.
-    Returns True if user is authenticated.
+    Check authentication via Azure AD + Supabase implicit OAuth.
+    Implicit flow returns #access_token in URL fragment.
+    st.markdown JS (runs in main context, not iframe) captures it.
     """
-    # Step 1: Check if we got a ?code= back from Supabase (PKCE callback)
+    # Step 1: Check if we have access_token in query params (from JS redirect)
     params = st.query_params
-    code = params.get("code")
+    token = params.get("access_token")
 
-    if code:
+    if token:
         try:
             sb = get_sb_auth()
-            verifier = st.session_state.get("pkce_verifier", "")
-            resp = sb.auth.exchange_code_for_session({"auth_code": code, "code_verifier": verifier})
-            user = resp.user
+            user_resp = sb.auth.get_user(token)
+            user = user_resp.user
             if user and user.email == ALLOWED_EMAIL:
                 st.session_state["user"] = user
-                st.session_state["access_token"] = resp.session.access_token
-                st.session_state.pop("pkce_verifier", None)
+                st.session_state["access_token"] = token
                 st.query_params.clear()
                 return True
             else:
@@ -102,14 +89,32 @@ def auth_guard():
         except Exception as e:
             st.session_state.pop("user", None)
             st.session_state.pop("access_token", None)
-            st.session_state.pop("pkce_verifier", None)
             st.error(f"Erro na autentica\u00e7\u00e3o: {e}")
 
     # Step 2: Check session state (already logged in this session)
     if "user" in st.session_state:
         return True
 
-    # Step 3: Show login page
+    # Step 3: Inject fragment parser via st.markdown (runs in MAIN context)
+    st.markdown("""
+    <script>
+    (function() {
+        var hash = window.location.hash;
+        if (hash && hash.indexOf('access_token=') !== -1) {
+            var params = new URLSearchParams(hash.substring(1));
+            var token = params.get('access_token');
+            if (token) {
+                var url = new URL(window.location.href);
+                url.hash = '';
+                url.searchParams.set('access_token', token);
+                window.location.replace(url.toString());
+            }
+        }
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+
+    # Step 4: Show login page
     st.markdown("""
     <style>
     .login-container {
@@ -123,18 +128,12 @@ def auth_guard():
     </div>
     """, unsafe_allow_html=True)
 
-    # Generate PKCE verifier/challenge and build OAuth URL
-    verifier, challenge = _generate_pkce()
-    st.session_state["pkce_verifier"] = verifier
-
     oauth_url = (
         f"{SUPABASE_URL}/auth/v1/authorize?"
         + urlencode({
             "provider": "azure",
             "redirect_to": REDIRECT_URL,
             "scopes": "email",
-            "code_challenge": challenge,
-            "code_challenge_method": "S256",
         })
     )
 
