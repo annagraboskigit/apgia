@@ -33,6 +33,10 @@ SUPABASE_URL = "https://rqiwrlygeduzaaejlmrx.supabase.co"
 ALLOWED_EMAIL = "eu@annagraboski.com"
 
 
+# Anon key for auth operations (PKCE exchange needs anon, not service_role)
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJxaXdybHlnZWR1emFhZWpsbXJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyMjE5MjgsImV4cCI6MjA4ODc5NzkyOH0.qT2UV4EB3yPxqETZrpWz2Ypsy7a1RslWW51JmD8ttkw"
+
+
 # ── Supabase connection (cached) ──────────────────────────────
 @st.cache_resource
 def get_sb():
@@ -48,6 +52,12 @@ def get_sb():
         st.error("Configure SUPABASE_KEY em .streamlit/secrets.toml ou variavel de ambiente.")
         st.stop()
     return create_client(url, key)
+
+
+@st.cache_resource
+def get_sb_auth():
+    """Anon client for auth operations (PKCE exchange)."""
+    return create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 
 # ── Auth: Azure AD via Supabase OAuth (PKCE flow) ───────────────
@@ -76,7 +86,7 @@ def auth_guard():
 
     if code:
         try:
-            sb = get_sb()
+            sb = get_sb_auth()
             verifier = st.session_state.get("pkce_verifier", "")
             resp = sb.auth.exchange_code_for_session({"auth_code": code, "code_verifier": verifier})
             user = resp.user
@@ -139,6 +149,8 @@ def auth_guard():
 
     st.stop()
     return False
+
+
 # ── Theme colors ────────────────────────────────────────────────
 COLORS = {
     "ctl": "#2196F3",       # blue - fitness
@@ -762,7 +774,6 @@ def get_sb():
     return create_client(url, key)
 
 
-# ── Auth: Azure AD via Supabase OAuth ──────────────────────────
 # ── Theme colors ────────────────────────────────────────────────
 COLORS = {
     "ctl": "#2196F3",       # blue - fitness
