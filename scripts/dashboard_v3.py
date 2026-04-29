@@ -15,6 +15,7 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import datetime
 from supabase import create_client
+from urllib.parse import urlencode
 
 # ── Config ──────────────────────────────────────────────────────
 st.set_page_config(
@@ -26,6 +27,10 @@ st.set_page_config(
 
 SCHEMA = "apgia"
 
+# Azure AD / Supabase Auth config
+SUPABASE_URL = "https://rqiwrlygeduzaaejlmrx.supabase.co"
+ALLOWED_EMAIL = "eu@annagraboski.com"
+
 
 # ── Supabase connection (cached) ──────────────────────────────
 @st.cache_resource
@@ -36,12 +41,134 @@ def get_sb():
         key = st.secrets["SUPABASE_KEY"]
     except Exception:
         import os
-        url = os.environ.get("SUPABASE_URL", "https://rqiwrlygeduzaaejlmrx.supabase.co")
+        url = os.environ.get("SUPABASE_URL", SUPABASE_URL)
         key = os.environ.get("SUPABASE_KEY", "")
     if not key:
-        st.error("⚠️ Configure SUPABASE_KEY em .streamlit/secrets.toml ou variável de ambiente.")
+        st.error("Configure SUPABASE_KEY em .streamlit/secrets.toml ou variavel de ambiente.")
         st.stop()
     return create_client(url, key)
+
+
+# ── Auth: Azure AD via Supabase OAuth ──────────────────────────
+def _get_redirect_url():
+    """Build the redirect URL for OAuth callback (back to this Streamlit app)."""
+    # In Streamlit Cloud, use the app URL; locally, use localhost
+    try:
+        base = st.secrets.get("APP_URL", "http://localhost:8501")
+    except Exception:
+        base = "http://localhost:8501"
+    return base
+
+
+def _extract_token_from_fragment():
+    """
+    After Supabase OAuth redirect, the access_token is in the URL fragment.
+    Streamlit can't read fragments natively, so we inject JS to parse it
+    and redirect with the token as a query param.
+    """
+    # If we already have token in query params (from our JS redirect), use it
+    params = st.query_params
+    if "access_token" in params:
+        return params["access_token"]
+    return None
+
+
+def _inject_fragment_parser():
+    """Inject JS that reads the URL hash fragment and converts to query param."""
+    st.html("""
+    <script>
+    (function() {
+        const hash = window.location.hash;
+        if (hash && hash.includes('access_token=')) {
+            const params = new URLSearchParams(hash.substring(1));
+            const token = params.get('access_token');
+            if (token) {
+                // Replace hash with query param so Streamlit can read it
+                const url = new URL(window.location.href);
+                url.hash = '';
+                url.searchParams.set('access_token', token);
+                window.location.replace(url.toString());
+            }
+        }
+    })();
+    </script>
+    """)
+
+
+def auth_guard():
+    """
+    Check authentication. Returns True if user is authenticated.
+    Handles the OAuth flow with Azure AD via Supabase.
+    """
+    # Step 1: Check if we have a token from OAuth redirect
+    token = _extract_token_from_fragment()
+
+    if token:
+        # Validate token with Supabase
+        try:
+            sb = get_sb()
+            user_resp = sb.auth.get_user(token)
+            user = user_resp.user
+            if user and user.email == ALLOWED_EMAIL:
+                st.session_state["user"] = user
+                st.session_state["access_token"] = token
+                # Clean URL
+                st.query_params.clear()
+                return True
+            else:
+                st.error(f"Acesso negado. Email: {user.email if user else 'unknown'}")
+                st.stop()
+        except Exception as e:
+            # Token expired or invalid — need re-login
+            st.session_state.pop("user", None)
+            st.session_state.pop("access_token", None)
+
+    # Step 2: Check session state (already logged in this session)
+    if "user" in st.session_state:
+        return True
+
+    # Step 3: Inject fragment parser (in case we just got redirected)
+    _inject_fragment_parser()
+
+    # Step 4: Show login page
+    st.markdown("""
+    <style>
+    .login-container {
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: center; min-height: 60vh;
+    }
+    .login-title { font-size: 3rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .login-sub { color: #8B949E; font-size: 1.1rem; margin-bottom: 2rem; }
+    </style>
+    <div class="login-container">
+        <div class="login-title">APGIA</div>
+        <div class="login-sub">Saude & Performance Dashboard</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Build Supabase OAuth URL for Azure AD
+    redirect_to = _get_redirect_url()
+    oauth_url = (
+        f"{SUPABASE_URL}/auth/v1/authorize?"
+        + urlencode({
+            "provider": "azure",
+            "redirect_to": redirect_to,
+            "scopes": "email",
+        })
+    )
+
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        st.link_button(
+            "Entrar com Microsoft (Azure AD)",
+            oauth_url,
+            use_container_width=True,
+            type="primary",
+        )
+        st.caption("SSO corporativo — mesmo login do Scout")
+
+    st.stop()
+    return False
 
 
 # ── Theme colors ────────────────────────────────────────────────
@@ -144,9 +271,12 @@ def load_lab_results():
     return df
 
 
+# ── Auth Gate ──────────────────────────────────────────────────
+auth_guard()
+
 # ── Sidebar ─────────────────────────────────────────────────────
 st.sidebar.title("🚴‍♀️ APGIA")
-st.sidebar.caption("Saúde & Performance")
+st.sidebar.caption("Saude & Performance")
 
 page = st.sidebar.radio(
     "Navegação",
@@ -608,4 +738,8 @@ elif page == "⚖️ Peso":
 
 # ── Footer ──────────────────────────────────────────────────────
 st.sidebar.markdown("---")
-st.sidebar.caption("APGIA v3 • Supabase + Streamlit")
+if st.sidebar.button("Sair", type="secondary"):
+    st.session_state.pop("user", None)
+    st.session_state.pop("access_token", None)
+    st.rerun()
+st.sidebar.caption("APGIA v3 • Supabase + Azure AD SSO")
