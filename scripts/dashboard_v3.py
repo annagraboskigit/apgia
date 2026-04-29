@@ -52,17 +52,7 @@ def get_sb():
 # ── Auth: Azure AD via Supabase OAuth ──────────────────────────
 def _get_redirect_url():
     """Build the redirect URL for OAuth callback (back to this Streamlit app)."""
-    # In Streamlit Cloud, use the app URL; locally, use localhost
-    try:
-        base = st.secrets["APP_URL"]
-    except Exception:
-        base = "http://localhost:8501"
-    # Ensure trailing slash
-    if not base.endswith("/"):
-        base += "/"
-    return base
-
-
+    return "https://apgia-dashboard.streamlit.app/"
 def _extract_token_from_fragment():
     """
     After Supabase OAuth redirect, the access_token is in the URL fragment.
@@ -800,17 +790,7 @@ def get_sb():
 # ── Auth: Azure AD via Supabase OAuth ──────────────────────────
 def _get_redirect_url():
     """Build the redirect URL for OAuth callback (back to this Streamlit app)."""
-    # In Streamlit Cloud, use the app URL; locally, use localhost
-    try:
-        base = st.secrets.get("APP_URL", "http://localhost:8501")
-    except Exception:
-        base = "http://localhost:8501"
-    # Ensure trailing slash
-    if not base.endswith("/"):
-        base += "/"
-    return base
-
-
+    return "https://apgia-dashboard.streamlit.app/"
 def _extract_token_from_fragment():
     """
     After Supabase OAuth redirect, the access_token is in the URL fragment.
